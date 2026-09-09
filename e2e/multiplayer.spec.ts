@@ -1,5 +1,27 @@
 import { test, expect, type Page } from '@playwright/test';
 
+/**
+ * A released object animates back to its place, so reading its box once can aim at where
+ * it used to be. Waits until two consecutive reads agree before returning.
+ */
+async function settledBox(locator: ReturnType<Page['locator']>) {
+  let previous = await locator.boundingBox();
+  for (let i = 0; i < 40; i++) {
+    await locator.page().waitForTimeout(50);
+    const next = await locator.boundingBox();
+    if (
+      previous &&
+      next &&
+      Math.abs(previous.x - next.x) < 0.5 &&
+      Math.abs(previous.y - next.y) < 0.5
+    )
+      return next;
+    previous = next;
+  }
+  if (!previous) throw new Error('objet introuvable');
+  return previous;
+}
+
 async function register(page: Page, nickname: string) {
   await page.getByLabel('Votre pseudo').fill(nickname);
   await page.getByRole('button', { name: 'C’est parti' }).click();
@@ -49,6 +71,25 @@ test('30 bottles, two independent browser contexts, reconnect and shared victory
         .locator('[data-bottle]')
         .evaluateAll((nodes) => nodes.map((n) => n.getAttribute('data-color'))),
     );
+    // Crates sit on every border, so a board reaching past the fold would leave some of
+    // them undraggable. This is asserted on both players, whose windows differ in size.
+    for (const player of [alice, bob]) {
+      const fits = await player.evaluate(() => {
+        const board = document.querySelector('.sorting-board')!.getBoundingClientRect();
+        return {
+          bottom: Math.round(board.bottom),
+          right: Math.round(board.right),
+          vh: window.innerHeight,
+          vw: window.innerWidth,
+        };
+      });
+      expect(fits.bottom, 'le plateau doit tenir dans la hauteur visible').toBeLessThanOrEqual(
+        fits.vh,
+      );
+      expect(fits.right, 'le plateau doit tenir dans la largeur visible').toBeLessThanOrEqual(
+        fits.vw,
+      );
+    }
     const aBoard = (await alice.getByTestId('sorting-board').boundingBox())!;
     await alice.mouse.move(aBoard.x + aBoard.width * 0.5, aBoard.y + aBoard.height * 0.5);
     await expect(bob.locator('[data-cursor]').first()).toHaveCSS('opacity', '1');
@@ -85,7 +126,7 @@ test('30 bottles, two independent browser contexts, reconnect and shared victory
       const player = i % 2 ? bob : alice;
       const bottle = player.locator('[data-bottle="b' + i + '"]');
       const color = await bottle.getAttribute('data-color');
-      const box = (await bottle.boundingBox())!;
+      const box = await settledBox(bottle);
       const bin = (await player.locator('[data-bin="' + color + '"]').boundingBox())!;
       await player.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
       await player.mouse.down();

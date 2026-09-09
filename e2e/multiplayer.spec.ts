@@ -4,10 +4,12 @@ async function register(page: Page, nickname: string) {
   await page.getByLabel('Votre pseudo').fill(nickname);
   await page.getByRole('button', { name: 'C’est parti' }).click();
 }
-async function createRoom(page: Page, nickname: string) {
+async function createRoom(page: Page, nickname: string, objects = 30) {
   await page.goto('/games/sorting');
   await page.getByRole('button', { name: 'Créer une partie', exact: true }).click();
   await register(page, nickname);
+  // Pinned so the scenario does not depend on whatever the default happens to be.
+  await page.getByLabel('Objets à ranger').fill(String(objects));
   await page.getByRole('button', { name: 'Créer la partie', exact: true }).click();
   await expect(page.getByRole('heading', { name: 'On s’installe ?' })).toBeVisible();
 }
@@ -28,7 +30,7 @@ test('30 bottles, two independent browser contexts, reconnect and shared victory
     await alice.screenshot({ path: 'test-results/home-desktop.png', fullPage: true });
     await createRoom(alice, 'Camille');
     const url = alice.url();
-    await expect(alice.getByLabel('Bouteilles à ranger')).toHaveValue('30');
+    await expect(alice.getByLabel('Objets à ranger')).toHaveValue('30');
     await expect(alice.getByLabel('Nombre maximal de joueurs')).toHaveValue('4');
     await bob.goto(url);
     await register(bob, 'Alex');

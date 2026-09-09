@@ -3,7 +3,8 @@ import { beforeEach, describe, expect, it } from 'vitest';
 import {
   binAt,
   DEFAULT_SETTINGS,
-  getBins,
+  MAX_BOTTLES,
+  MAX_SHAPES,
   LOCK_TTL_MS,
   RECONNECT_GRACE_MS,
   commandSchema,
@@ -27,6 +28,12 @@ describe('authoritative cooperative rooms', () => {
   function send(session: Session, command: CommandInput) {
     return rooms.handle(session, { ...command, requestId: randomUUID() });
   }
+  // Crates are laid out randomly per round, so every test reads them back from the state.
+  const binsOf = (code: string) => rooms.snapshot(code).game!.bins;
+  const center = (bin: { x: number; y: number; width: number; height: number }) => ({
+    x: bin.x + bin.width / 2,
+    y: bin.y + bin.height / 2,
+  });
   function prepare() {
     const code = rooms.create(alice, settings);
     rooms.join(bob, code);
@@ -91,35 +98,42 @@ describe('authoritative cooperative rooms', () => {
     expect(() => rooms.start(alice, code)).toThrow('commencé');
     expect(() => rooms.join(sessions.create('Clara'), code)).toThrow('commencé');
   });
-  it('scatters bottles inside the board and clear of every bin', () => {
-    // 60 bottles over 3 colours is the densest board the settings allow.
-    const dense = { ...DEFAULT_SETTINGS, bottleCount: 60, maxPlayers: 2, colorCount: 3 };
+  it('scatters objects clear of every crate and never on a grid', () => {
+    // The densest board the settings allow: the maximum objects over the fewest colours.
+    const dense = {
+      bottleCount: MAX_BOTTLES,
+      maxPlayers: 2,
+      colorCount: 3,
+      shapeCount: MAX_SHAPES,
+    };
     const code = rooms.create(alice, dense);
     rooms.start(alice, code);
     const bottles = rooms.snapshot(code).game!.bottles;
-    const bins = getBins(dense.colorCount);
-    const lowestBin = Math.max(...bins.map((b) => b.y + b.height));
+    const bins = binsOf(code);
+    expect(bins).toHaveLength(3);
     for (const bottle of bottles) {
-      expect(binAt(bottle.position, dense.colorCount)).toBeUndefined();
-      expect(bottle.position.y).toBeGreaterThan(lowestBin);
+      expect(binAt(bottle.position, bins)).toBeUndefined();
       expect(bottle.position.x).toBeGreaterThanOrEqual(0);
       expect(bottle.position.x).toBeLessThanOrEqual(1);
+      expect(bottle.position.y).toBeGreaterThanOrEqual(0);
       expect(bottle.position.y).toBeLessThanOrEqual(1);
       expect(bottle.home).toEqual(bottle.position);
       expect(Math.abs(bottle.tilt)).toBeLessThanOrEqual(9);
       expect(bottle.shape).toBeGreaterThanOrEqual(0);
-      expect(bottle.shape).toBeLessThanOrEqual(2);
+      expect(bottle.shape).toBeLessThan(MAX_SHAPES);
     }
+    // A grid of this many objects would reuse roughly 25 x values across its columns.
+    // A scatter spreads them over hundreds, which is the difference being asserted here.
+    const columns = new Set(bottles.map((b) => b.position.x.toFixed(3)));
+    expect(columns.size).toBeGreaterThan(bottles.length / 2);
+    const rows = new Set(bottles.map((b) => b.position.y.toFixed(3)));
+    expect(rows.size).toBeGreaterThan(bottles.length / 2);
     // Every colour must fit its shelf, so a full board can actually be completed.
     for (const bin of bins) {
       const ofColour = bottles.filter((b) => b.color === bin.color);
       for (const bottle of ofColour) {
         const held = take(code, alice, bottles.indexOf(bottle));
-        send(alice, {
-          ...held,
-          type: 'bottle:release',
-          position: { x: bin.x + bin.width / 2, y: bin.y + bin.height / 2 },
-        });
+        send(alice, { ...held, type: 'bottle:release', position: center(bin) });
       }
       for (const stored of rooms
         .snapshot(code)
@@ -144,24 +158,16 @@ describe('authoritative cooperative rooms', () => {
   it('validates drops against the server bins and restores wrong drops', () => {
     const code = prepare();
     const held = take(code);
-    const bins = getBins(3);
+    const bins = binsOf(code);
     const wrong = bins.find((b) => b.color !== held.bottle.color)!;
-    send(alice, {
-      ...held,
-      type: 'bottle:release',
-      position: { x: wrong.x + 0.03, y: wrong.y + 0.1 },
-    });
+    send(alice, { ...held, type: 'bottle:release', position: center(wrong) });
     const bottle = rooms.snapshot(code).game!.bottles[0]!;
     expect(bottle.sorted).toBe(false);
     expect(bottle.lock).toBeNull();
     expect(bottle.position).toEqual(bottle.home);
     const next = take(code);
     const correct = bins.find((b) => b.color === next.bottle.color)!;
-    send(alice, {
-      ...next,
-      type: 'bottle:release',
-      position: { x: correct.x + 0.03, y: correct.y + 0.1 },
-    });
+    send(alice, { ...next, type: 'bottle:release', position: center(correct) });
     expect(rooms.snapshot(code).game!.bottles[0]!.sorted).toBe(true);
     expect(rooms.snapshot(code).players[0]!.sorted).toBe(1);
   });
@@ -206,13 +212,9 @@ describe('authoritative cooperative rooms', () => {
     for (let i = 0; i < 6; i++) {
       const player = i % 2 ? bob : alice;
       const held = take(code, player, i);
-      const bin = getBins(3).find((b) => b.color === held.bottle.color)!;
+      const bin = binsOf(code).find((b) => b.color === held.bottle.color)!;
       now += 100;
-      send(player, {
-        ...held,
-        type: 'bottle:release',
-        position: { x: bin.x + bin.width / 2, y: bin.y + bin.height / 2 },
-      });
+      send(player, { ...held, type: 'bottle:release', position: center(bin) });
     }
     expect(rooms.snapshot(code).status).toBe('finished');
     expect(results).toHaveLength(1);

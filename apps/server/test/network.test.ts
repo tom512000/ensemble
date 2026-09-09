@@ -3,7 +3,6 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { io, type Socket } from 'socket.io-client';
 import {
   DEFAULT_SETTINGS,
-  getBins,
   type ClientEvents,
   type CommandInput,
   type GuestSession,
@@ -118,16 +117,15 @@ describe('real Socket.IO clients', () => {
       bottleId: first.id,
       position: { x: 0.4, y: 0.5 },
     });
-    const firstBin = getBins(3).find((bin) => bin.color === first.color)!;
+    // Crates sit at random spots on the borders, so drops aim at the round's own layout.
+    const center = (bin: { x: number; y: number; width: number; height: number }) => ({
+      x: bin.x + bin.width / 2,
+      y: bin.y + bin.height / 2,
+    });
+    const firstBin = game.bins.find((bin) => bin.color === first.color)!;
     const sorted = new Promise((resolve) => bob.once('bottle:state', resolve));
     expect(
-      (
-        await request(alice, {
-          ...drag,
-          type: 'bottle:release',
-          position: { x: firstBin.x + 0.05, y: 0.18 },
-        })
-      ).ok,
+      (await request(alice, { ...drag, type: 'bottle:release', position: center(firstBin) })).ok,
     ).toBe(true);
     expect(await sorted).toMatchObject({ bottle: { id: first.id, sorted: true, lock: null } });
     const aWon = nextRoom(alice, (room) => room.status === 'finished'),
@@ -135,13 +133,13 @@ describe('real Socket.IO clients', () => {
     for (const bottle of game.bottles.slice(1)) {
       const input = { code, roundId: game.roundId, bottleId: bottle.id, dragId: randomUUID() };
       expect((await request(alice, { ...input, type: 'bottle:grab' })).ok).toBe(true);
-      const bin = getBins(3).find((bin) => bin.color === bottle.color)!;
+      const bin = game.bins.find((bin) => bin.color === bottle.color)!;
       expect(
         (
           await request(alice, {
             ...input,
             type: 'bottle:release',
-            position: { x: bin.x + 0.05, y: 0.18 },
+            position: center(bin),
           })
         ).ok,
       ).toBe(true);

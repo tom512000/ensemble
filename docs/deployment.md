@@ -107,7 +107,7 @@ avant la migration. Installation, puis vérification à blanc :
 
 ```sh
 sudo install -m 755 infra/backup-ensemble /usr/local/bin/backup-ensemble
-sudo ENSEMBLE_DIR=/opt/ensemble /usr/local/bin/backup-ensemble
+sudo ENSEMBLE_DIR=/opt/apps/ensemble /usr/local/bin/backup-ensemble
 ```
 
 | Variable     | Rôle                                | Défaut                  |

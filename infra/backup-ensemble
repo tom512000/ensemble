@@ -6,12 +6,13 @@
 # existing only on one machine.
 #
 # Environment (all optional):
-#   ENSEMBLE_DIR      project checkout holding compose.yaml   (default: /opt/ensemble)
+#   ENSEMBLE_DIR      project checkout holding compose.yaml   (default: /opt/apps/ensemble)
 #   BACKUP_DIR        where dumps are written                 (default: /var/backups/ensemble)
 #   BACKUP_KEEP       how many dumps to keep                  (default: 14)
 set -euo pipefail
 
-project_dir="${ENSEMBLE_DIR:-/opt/ensemble}"
+
+project_dir="${ENSEMBLE_DIR:-/opt/apps/ensemble}"
 backup_dir="${BACKUP_DIR:-/var/backups/ensemble}"
 keep="${BACKUP_KEEP:-14}"
 

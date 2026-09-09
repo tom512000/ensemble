@@ -347,7 +347,7 @@ export class RoomManager {
               game,
               bottle,
               command.position,
-              room.settings.colorCount,
+              room.settings.bottleCount,
               session.id,
             );
             if (sorted) {

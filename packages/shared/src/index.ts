@@ -21,6 +21,29 @@ export const PLAYER_COLORS = [
   '#7e7931',
 ];
 export const WORLD = { width: 1200, height: 700 } as const;
+/**
+ * Measured, not guessed. On the production bundle with the CPU throttled 6x, 300 objects
+ * hold a 60 fps median; 400 falls off a cliff. See docs/architecture.md.
+ */
+export const MAX_BOTTLES = 300;
+/** Six silhouettes in one flat style. The label, not the shape, tells you where an object goes. */
+export const SHAPES = [
+  { id: 'bottle', label: 'Bouteille' },
+  { id: 'jar', label: 'Bocal' },
+  { id: 'can', label: 'Canette' },
+  { id: 'flask', label: 'Flacon' },
+  { id: 'carton', label: 'Brique' },
+  { id: 'tube', label: 'Tube' },
+] as const;
+export const MAX_SHAPES = SHAPES.length;
+/**
+ * Width of one object as a fraction of the board. Objects shrink as the board fills so a
+ * busy round stays readable and every item stays comfortably grabbable.
+ */
+export function objectWidth(bottleCount: number): number {
+  const ideal = Math.sqrt((WORLD.width * WORLD.height * 0.78) / Math.max(1, bottleCount)) * 0.78;
+  return Math.min(64, Math.max(26, ideal)) / WORLD.width;
+}
 export const NETWORK_INTERVAL_MS = 40;
 export const LOCK_TTL_MS = 3000;
 export const RECONNECT_GRACE_MS = 30_000;
@@ -32,13 +55,19 @@ export const nicknameSchema = z
   .regex(/^[\p{L}\p{N} _.'-]+$/u, 'Utilisez des lettres, chiffres, espaces ou tirets.');
 export const settingsSchema = z
   .object({
-    bottleCount: z.number().int().min(6).max(60),
+    bottleCount: z.number().int().min(6).max(MAX_BOTTLES),
     maxPlayers: z.number().int().min(2).max(8),
     colorCount: z.number().int().min(3).max(6),
+    shapeCount: z.number().int().min(1).max(MAX_SHAPES),
   })
   .strict();
 export type RoomSettings = z.infer<typeof settingsSchema>;
-export const DEFAULT_SETTINGS: RoomSettings = { bottleCount: 30, maxPlayers: 4, colorCount: 6 };
+export const DEFAULT_SETTINGS: RoomSettings = {
+  bottleCount: 40,
+  maxPlayers: 4,
+  colorCount: 6,
+  shapeCount: 4,
+};
 export const pointSchema = z
   .object({ x: z.number().finite().min(0).max(1), y: z.number().finite().min(0).max(1) })
   .strict();
@@ -119,6 +148,7 @@ export interface Bottle {
 }
 export interface SortingState {
   roundId: string;
+  bins: Bin[];
   bottles: Bottle[];
   startedAt: number;
   finishedAt: number | null;
@@ -171,26 +201,21 @@ export interface ClientEvents {
   command: (command: Command, ack: (reply: Reply) => void) => void;
   motion: (motion: Motion) => void;
 }
+export type BinEdge = 'top' | 'right' | 'bottom' | 'left';
+/**
+ * Crates are laid out randomly along the borders, so they are part of the round the
+ * server broadcasts rather than something each client recomputes.
+ */
 export interface Bin {
   color: BottleColor;
+  edge: BinEdge;
   x: number;
   y: number;
   width: number;
   height: number;
 }
-export function getBins(colorCount: number): Bin[] {
-  const gap = 0.018;
-  const width = (0.94 - gap * (colorCount - 1)) / colorCount;
-  return COLORS.slice(0, colorCount).map((color, i) => ({
-    color,
-    x: 0.03 + i * (width + gap),
-    y: 0.055,
-    width,
-    height: 0.26,
-  }));
-}
-export function binAt(point: Point, colorCount: number): Bin | undefined {
-  return getBins(colorCount).find(
+export function binAt(point: Point, bins: Bin[]): Bin | undefined {
+  return bins.find(
     (b) =>
       point.x >= b.x && point.x <= b.x + b.width && point.y >= b.y && point.y <= b.y + b.height,
   );

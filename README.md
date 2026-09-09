@@ -1,7 +1,7 @@
 # Ensemble
 
 Un hub de mini-jeux coopératifs en temps réel. Le premier jeu, **À sa place**, consiste à ranger
-des bouteilles dans les bacs de leur couleur. Les deux navigateurs jouent contre le même état
+des objets en verre dans les bacs de leur couleur. Les deux navigateurs jouent contre le même état
 serveur, avec des curseurs partagés et des prises exclusives.
 
 ## Stack et structure
@@ -79,9 +79,25 @@ En production, DATABASE_URL est obligatoire.
 Le serveur et Vite chargent le `.env` racine. Les variables VITE sont publiques et fixées
 au build : **aucun secret** dans une variable commençant par VITE. Ne pas versionner `.env`.
 
+## Réglages d’une partie
+
+L’hôte choisit tout à la création, puis peut encore ajuster dans le lobby :
+
+| Réglage           | Valeurs | Effet                                                                                                                                                                                        |
+| ----------------- | ------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Objets à ranger   | 6 à 300 | Plafond mesuré, pas deviné : voir [docs/architecture.md](docs/architecture.md). Les objets rétrécissent à mesure que le plateau se remplit, en gardant un écart qui les laisse saisissables. |
+| Places à la table | 2 à 8   | Ne peut pas descendre sous le nombre de joueurs déjà présents.                                                                                                                               |
+| Couleurs          | 3 à 6   | Autant de bacs que de couleurs.                                                                                                                                                              |
+| Variété d’objets  | 1 à 6   | Bouteille, bocal, canette, flacon, brique, tube. La forme est décorative : seule l’étiquette dit où va l’objet.                                                                              |
+
+Chaque manche est disposée par le serveur : les bacs sont tirés au hasard le long des quatre
+bords et les objets sont éparpillés sans alignement, avec une inclinaison légère qui se redresse
+dès qu’on les attrape ou qu’ils sont rangés. Deux manches ne se ressemblent donc jamais, et les
+deux navigateurs voient exactement la même disposition.
+
 ## Vérifier le vrai multijoueur
 
-1. Ouvrir le site, choisir un pseudo, créer une table : 30 bouteilles, 4 places.
+1. Ouvrir le site, choisir un pseudo, créer une table : 30 objets, 4 places.
 2. Copier le lien d’invitation depuis le lobby.
 3. Ouvrir le lien dans un autre navigateur, profil ou fenêtre privée, avec un autre pseudo.
 4. Observer les deux joueurs dans le lobby puis démarrer.

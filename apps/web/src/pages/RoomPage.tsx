@@ -17,8 +17,14 @@ function Lobby({ room }: { room: RoomState }) {
       bottleCount: room.settings.bottleCount,
       maxPlayers: room.settings.maxPlayers,
       colorCount: room.settings.colorCount,
+      shapeCount: room.settings.shapeCount,
     });
-  }, [room.settings.bottleCount, room.settings.maxPlayers, room.settings.colorCount]); // synchronized host edits
+  }, [
+    room.settings.bottleCount,
+    room.settings.maxPlayers,
+    room.settings.colorCount,
+    room.settings.shapeCount,
+  ]); // synchronized host edits
   const changed = JSON.stringify(settings) !== JSON.stringify(room.settings);
   async function apply(start: boolean) {
     setBusy(true);

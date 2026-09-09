@@ -4,7 +4,7 @@ import { ArrowLeft, ArrowRight, Heart, Plus, UsersRound } from 'lucide-react';
 import { DEFAULT_SETTINGS, type RoomSettings } from '@ensemble/shared';
 import { errorMessage, useRealtime } from '../lib/realtime';
 import { Modal, NicknameForm, SettingsFields } from '../components/ui';
-import { SortingIllustration } from '../components/BottleArt';
+import { SortingIllustration } from '../components/ObjectArt';
 export function GamePage() {
   const { rooms, session, status, command } = useRealtime();
   const navigate = useNavigate();

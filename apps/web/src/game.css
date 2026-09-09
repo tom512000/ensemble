@@ -321,14 +321,31 @@
   display: flex;
   justify-content: center;
   align-items: center;
-  gap: 6px;
+  gap: 5px;
   position: absolute;
   left: 0;
   right: 0;
-  top: 8%;
-  font-size: clamp(7px, 1vw, 11px);
+  top: 7%;
+  font-size: clamp(7px, 0.85vw, 10px);
   color: color-mix(in srgb, var(--bin-color) 68%, #3b432e);
   font-weight: 600;
+  pointer-events: none;
+  white-space: nowrap;
+  overflow: hidden;
+}
+.bin-count {
+  position: absolute;
+  right: 5%;
+  bottom: 6%;
+  min-width: 17px;
+  padding: 1px 4px;
+  border-radius: 7px;
+  background: color-mix(in srgb, var(--bin-color) 78%, #35402c);
+  color: #fffaf0;
+  font-size: 9px;
+  font-weight: 700;
+  text-align: center;
+  pointer-events: none;
 }
 .bin-label i {
   display: inline-grid;
@@ -350,29 +367,12 @@
   border-radius: 50%;
   background: color-mix(in srgb, var(--bin-color) 20%, transparent);
 }
-.board-divider {
-  position: absolute;
-  left: 3%;
-  right: 3%;
-  top: 36%;
-  height: 1px;
-  background: #dedbc82b;
-  display: flex;
-  justify-content: center;
-}
-.board-divider span {
-  font-size: 7px;
-  letter-spacing: 2px;
-  color: #b8b99d;
-  transform: translateY(-50%);
-  padding: 0 17px;
-  background: #f4f0e1;
-}
 .game-bottle {
   position: absolute;
   left: 0;
   top: 0;
-  width: 5.3%;
+  /* Sized by the round: the server and the board agree through objectWidth(). */
+  width: var(--object-size, 5.3%);
   aspect-ratio: 64/100;
   height: auto;
   visibility: hidden;
@@ -381,15 +381,17 @@
   background: transparent;
   cursor: grab;
   touch-action: none;
-  will-change: transform;
+  /* No will-change here on purpose: a busy board would otherwise promote hundreds of
+     compositing layers and cost far more memory than the animation saves. */
   transform-origin: center;
   transition: filter 0.2s;
 }
-.sorting-board[data-dense='true'] .game-bottle {
-  width: 3.8%;
-}
 .game-bottle:hover:not(.sorted) .bottle-art {
   filter: drop-shadow(2px 4px 4px #50614140);
+}
+.sorting-board[data-holding='true'] .game-bottle:hover .bottle-art {
+  filter: none;
+  transition: none;
 }
 .game-bottle[data-dragging='true'] {
   cursor: grabbing;
@@ -737,11 +739,6 @@
     font-size: 7px;
     width: 11px;
     height: 11px;
-  }
-  .board-divider span {
-    font-size: 4px;
-    letter-spacing: 1px;
-    padding: 0 8px;
   }
   .remote-cursor svg {
     width: 15px;

@@ -9,7 +9,7 @@ import {
   Sparkles,
   UsersRound,
 } from 'lucide-react';
-import { SortingIllustration } from '../components/BottleArt';
+import { SortingIllustration } from '../components/ObjectArt';
 export function Home() {
   const location = useLocation();
   useEffect(() => {

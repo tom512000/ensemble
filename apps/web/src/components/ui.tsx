@@ -7,7 +7,14 @@ import {
   type ReactNode,
 } from 'react';
 import { ArrowRight, Check, Copy, LoaderCircle, X } from 'lucide-react';
-import { nicknameSchema, type Player, type RoomSettings } from '@ensemble/shared';
+import {
+  MAX_BOTTLES,
+  MAX_SHAPES,
+  nicknameSchema,
+  SHAPES,
+  type Player,
+  type RoomSettings,
+} from '@ensemble/shared';
 import { errorMessage, useRealtime } from '../lib/realtime';
 
 export function Modal({
@@ -113,12 +120,12 @@ export function SettingsFields({
   return (
     <div className="settings-fields">
       <label>
-        Bouteilles à ranger <strong>{value.bottleCount}</strong>
+        Objets à ranger <strong>{value.bottleCount}</strong>
         <input
-          aria-label="Bouteilles à ranger"
+          aria-label="Objets à ranger"
           type="range"
           min="6"
-          max="60"
+          max={MAX_BOTTLES}
           step="1"
           value={value.bottleCount}
           disabled={disabled}
@@ -126,7 +133,7 @@ export function SettingsFields({
         />
       </label>
       <div className="preset-row">
-        {[10, 20, 30, 50].map((count) => (
+        {[20, 40, 80, 150, MAX_BOTTLES].map((count) => (
           <button
             key={count}
             type="button"
@@ -159,6 +166,7 @@ export function SettingsFields({
         <label>
           Couleurs
           <select
+            aria-label="Nombre de couleurs"
             disabled={disabled}
             value={value.colorCount}
             onChange={(e) => onChange({ ...value, colorCount: Number(e.target.value) })}
@@ -171,6 +179,27 @@ export function SettingsFields({
           </select>
         </label>
       </div>
+      <label>
+        Variété d’objets
+        <select
+          aria-label="Variété d’objets"
+          disabled={disabled}
+          value={value.shapeCount}
+          onChange={(e) => onChange({ ...value, shapeCount: Number(e.target.value) })}
+        >
+          {Array.from({ length: MAX_SHAPES }, (_, i) => i + 1).map((n) => (
+            <option key={n} value={n}>
+              {n === 1 ? 'Seulement des bouteilles' : n + ' formes différentes'}
+            </option>
+          ))}
+        </select>
+      </label>
+      <p className="form-hint">
+        {SHAPES.slice(0, value.shapeCount)
+          .map((shape) => shape.label)
+          .join(', ')}
+        .
+      </p>
     </div>
   );
 }

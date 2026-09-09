@@ -3,11 +3,13 @@ import { Link, NavLink, Outlet } from 'react-router-dom';
 import { ArrowUpRight, CircleHelp, Flower2, UserRound, X } from 'lucide-react';
 import { useRealtime } from '../lib/realtime';
 import { Modal, NicknameForm } from './ui';
+import { ObjectDefs } from './ObjectArt';
 export function Layout() {
   const { session, status, notice, notify, room, resetSession } = useRealtime();
   const [profileOpen, setProfileOpen] = useState(false);
   return (
     <div className="app-shell">
+      <ObjectDefs />
       <header className="site-header">
         <Link className="brand" to="/">
           <Flower2 strokeWidth={2.2} />

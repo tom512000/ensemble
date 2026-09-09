@@ -11,6 +11,15 @@ export default defineConfig({
       '/socket.io': { target: 'http://127.0.0.1:3005', ws: true },
     },
   },
+  // Same relay for the built bundle, so the production build can be tried locally.
+  preview: {
+    port: 5176,
+    strictPort: true,
+    proxy: {
+      '/api': 'http://127.0.0.1:3005',
+      '/socket.io': { target: 'http://127.0.0.1:3005', ws: true },
+    },
+  },
   optimizeDeps: { exclude: ['@ensemble/shared'] },
   build: {
     rollupOptions: {

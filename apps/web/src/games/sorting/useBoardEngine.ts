@@ -1,5 +1,5 @@
 import { createId } from '../../lib/id';
-import { useEffect, useRef, type PointerEvent as ReactPointerEvent } from 'react';
+import { useEffect, useMemo, useRef, type PointerEvent as ReactPointerEvent } from 'react';
 import {
   NETWORK_INTERVAL_MS,
   type Bottle,
@@ -27,6 +27,10 @@ interface AnimatedPoint {
 interface BottleAnimation extends AnimatedPoint {
   /** Eased separately from the position so straightening up reads as its own gesture. */
   tilt: number;
+  /** Last values pushed to the DOM, so a settled object costs nothing per frame. */
+  written: string;
+  layer: string;
+  dragging: string;
 }
 interface CursorPoint extends AnimatedPoint {
   seenAt: number;
@@ -43,13 +47,21 @@ export function useBoardEngine(room: RoomState) {
   const currentRoom = useRef(room);
   const drag = useRef<Drag | null>(null);
   const pointer = useRef<Point | null>(null);
-  const size = useRef({ width: 0, height: 0 });
+  /**
+   * The board's box, cached. Reading it during a pointer move would force the browser to
+   * lay out every object again, right after the animation frame moved them: the pointer
+   * fires often enough that this alone stalled a busy board.
+   */
+  const size = useRef({ width: 0, height: 0, left: 0, top: 0 });
   const sequence = useRef(0);
   const enabled = useRef(status === 'connected' && room.status === 'playing');
   const lastBottleStates = useRef(new Map<string, Bottle>());
+  // Looked up every frame for every object: this must never become a linear scan.
+  const byId = useRef(new Map<string, Bottle>());
   useEffect(() => {
     currentRoom.current = room;
     enabled.current = status === 'connected' && room.status === 'playing';
+    byId.current = new Map(room.game!.bottles.map((bottle) => [bottle.id, bottle]));
     for (const bottle of room.game!.bottles) {
       const previous = lastBottleStates.current.get(bottle.id);
       const existing = targets.current.get(bottle.id);
@@ -58,6 +70,9 @@ export function useBoardEngine(room: RoomState) {
           current: { ...bottle.position },
           target: { ...bottle.position },
           tilt: bottle.tilt,
+          written: '',
+          layer: '',
+          dragging: '',
         });
       else if (!bottle.lock || previous?.lock?.dragId !== bottle.lock.dragId)
         existing.target = { ...bottle.position };
@@ -81,7 +96,8 @@ export function useBoardEngine(room: RoomState) {
     }
   }, [room, status, notify]);
   function pointAt(clientX: number, clientY: number): Point {
-    const rect = boardRef.current!.getBoundingClientRect();
+    const rect = size.current;
+    if (!rect.width || !rect.height) return { x: 0, y: 0 };
     return {
       x: clamp((clientX - rect.left) / rect.width),
       y: clamp((clientY - rect.top) / rect.height),
@@ -166,11 +182,22 @@ export function useBoardEngine(room: RoomState) {
   useEffect(() => {
     const board = boardRef.current;
     if (!board) return;
-    const observer = new ResizeObserver(([entry]) => {
-      if (entry)
-        size.current = { width: entry.contentRect.width, height: entry.contentRect.height };
-    });
+    // One read here, never during a pointer move.
+    const measure = () => {
+      const rect = board.getBoundingClientRect();
+      size.current = {
+        width: rect.width,
+        height: rect.height,
+        left: rect.left,
+        top: rect.top,
+      };
+    };
+    measure();
+    const observer = new ResizeObserver(measure);
     observer.observe(board);
+    // Scrolling moves the board without resizing it, so the offsets are refreshed too.
+    window.addEventListener('scroll', measure, { passive: true, capture: true });
+    window.addEventListener('resize', measure, { passive: true });
     const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)');
     const onMotion = (motion: RemoteMotion) => {
       if (motion.type === 'bottle:move') {
@@ -201,6 +228,10 @@ export function useBoardEngine(room: RoomState) {
       previousTime = time;
       const alpha = reducedMotion.matches ? 1 : 1 - Math.exp(-delta / 45);
       const active = drag.current;
+      // While an object is held, the pointer sweeps over dozens of others. Letting each one
+      // run its hover filter repaints the board continuously, so hovering is switched off.
+      const holding = active ? 'true' : 'false';
+      if (board.dataset.holding !== holding) board.dataset.holding = holding;
       for (const [id, target] of targets.current) {
         const element = bottles.current.get(id);
         if (!element) continue;
@@ -210,24 +241,37 @@ export function useBoardEngine(room: RoomState) {
           target.current.x += (target.target.x - target.current.x) * alpha;
           target.current.y += (target.target.y - target.current.y) * alpha;
         }
-        const state = currentRoom.current.game!.bottles.find((b) => b.id === id);
-        const sorted = state?.sorted;
-        // Any bottle in someone's hand stands upright, which also keeps its name tag readable.
+        const state = byId.current.get(id);
+        const sorted = state?.sorted === true;
+        // Any object in someone's hand stands upright, which also keeps its name tag readable.
         const wanted = sorted || local || state?.lock ? 0 : (state?.tilt ?? 0);
         target.tilt += (wanted - target.tilt) * alpha;
-        element.style.transform =
+        // Rounded so a settled object produces an identical string and skips the DOM write.
+        const transform =
           'translate3d(' +
-          target.current.x * size.current.width +
+          (target.current.x * size.current.width).toFixed(2) +
           'px,' +
-          target.current.y * size.current.height +
+          (target.current.y * size.current.height).toFixed(2) +
           'px,0) translate(-50%,-50%) scale(' +
           (sorted ? 0.46 : local ? 1.07 : 1) +
           ') rotate(' +
           target.tilt.toFixed(2) +
           'deg)';
-        element.style.zIndex = local ? '50' : sorted ? '2' : '5';
-        element.style.visibility = 'visible';
-        element.dataset.dragging = local ? 'true' : 'false';
+        if (transform !== target.written) {
+          element.style.transform = transform;
+          target.written = transform;
+        }
+        const layer = local ? '50' : sorted ? '2' : '5';
+        if (layer !== target.layer) {
+          element.style.zIndex = layer;
+          element.style.visibility = 'visible';
+          target.layer = layer;
+        }
+        const dragging = local ? 'true' : 'false';
+        if (dragging !== target.dragging) {
+          element.dataset.dragging = dragging;
+          target.dragging = dragging;
+        }
       }
       for (const [id, element] of cursors.current) {
         const cursor = remoteCursors.current.get(id);
@@ -300,6 +344,8 @@ export function useBoardEngine(room: RoomState) {
       cancelRef.current();
       cancelAnimationFrame(frame);
       observer.disconnect();
+      window.removeEventListener('scroll', measure, { capture: true });
+      window.removeEventListener('resize', measure);
       socket?.off('motion', onMotion);
       window.removeEventListener('blur', cancel);
       window.removeEventListener('keydown', escape);
@@ -324,35 +370,48 @@ export function useBoardEngine(room: RoomState) {
     active.cancelled = cancelled;
     void finish(active);
   }
-  return {
-    boardRef,
-    bottles,
-    cursors,
-    onPointerMove,
-    onPointerLeave: () => {
-      pointer.current = null;
-    },
-    onPointerUp: (event: ReactPointerEvent) => endPointer(event),
-    onPointerCancel: (event: ReactPointerEvent) => endPointer(event, true),
-    onLostPointerCapture: (event: ReactPointerEvent) => {
-      if (drag.current && !drag.current.ended) endPointer(event, true);
-    },
-    grabBottle: (event: ReactPointerEvent<HTMLButtonElement>, bottle: Bottle) => {
-      if (!event.isPrimary || event.button !== 0) return;
-      event.preventDefault();
-      event.currentTarget.setPointerCapture(event.pointerId);
-      void begin(bottle, pointAt(event.clientX, event.clientY), event.pointerId);
-    },
-    keyboardGrab: (bottle: Bottle) => {
-      void begin(bottle, bottle.position, null);
-    },
-    keyboardDrop: (position: Point) => {
-      const active = drag.current;
-      if (active?.pointerId === null && !active.ended) {
-        active.position = position;
-        active.ended = true;
-        void finish(active);
-      }
-    },
-  };
+  // The handlers are rebuilt every render so they always read fresh state, but the object
+  // handed to the board keeps one identity. That is what lets each object memoise: sorting
+  // one item re-renders one item instead of all of them.
+  const latest = useRef({ onPointerMove, endPointer, begin, finish, pointAt });
+  latest.current = { onPointerMove, endPointer, begin, finish, pointAt };
+  return useMemo(
+    () => ({
+      boardRef,
+      bottles,
+      cursors,
+      onPointerMove: (event: ReactPointerEvent) => latest.current.onPointerMove(event),
+      onPointerLeave: () => {
+        pointer.current = null;
+      },
+      onPointerUp: (event: ReactPointerEvent) => latest.current.endPointer(event),
+      onPointerCancel: (event: ReactPointerEvent) => latest.current.endPointer(event, true),
+      onLostPointerCapture: (event: ReactPointerEvent) => {
+        if (drag.current && !drag.current.ended) latest.current.endPointer(event, true);
+      },
+      grabBottle: (event: ReactPointerEvent<HTMLButtonElement>, bottle: Bottle) => {
+        if (!event.isPrimary || event.button !== 0) return;
+        event.preventDefault();
+        event.currentTarget.setPointerCapture(event.pointerId);
+        void latest.current.begin(
+          bottle,
+          latest.current.pointAt(event.clientX, event.clientY),
+          event.pointerId,
+        );
+      },
+      keyboardGrab: (bottle: Bottle) => {
+        void latest.current.begin(bottle, bottle.position, null);
+      },
+      keyboardDrop: (position: Point) => {
+        const active = drag.current;
+        if (active?.pointerId === null && !active.ended) {
+          active.position = position;
+          active.ended = true;
+          void latest.current.finish(active);
+        }
+      },
+    }),
+    // Refs only: this API is created once for the life of the board.
+    [boardRef, bottles, cursors, pointer, drag],
+  );
 }

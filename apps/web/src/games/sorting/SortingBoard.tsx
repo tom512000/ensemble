@@ -1,27 +1,131 @@
-import { useEffect, useState, type CSSProperties } from 'react';
+import { memo, useEffect, useMemo, useState, type CSSProperties } from 'react';
 import { Check, Clock3, Heart, RotateCcw, Sparkles } from 'lucide-react';
-import { COLOR_META, getBins, type RoomState } from '@ensemble/shared';
+import {
+  COLOR_META,
+  objectWidth,
+  type Bin,
+  type Bottle,
+  type Player,
+  type RoomState,
+} from '@ensemble/shared';
 import { Avatar } from '../../components/ui';
-import { BottleArt } from '../../components/BottleArt';
+import { ObjectArt } from '../../components/ObjectArt';
 import { errorMessage, useRealtime } from '../../lib/realtime';
 import { useBoardEngine } from './useBoardEngine';
+
+type Engine = ReturnType<typeof useBoardEngine>;
+
+/**
+ * Memoised on purpose: a board can hold hundreds of objects, and storing one of them must
+ * not re-render the rest. Unchanged objects keep their identity across a bottle:state
+ * update, so React skips them entirely.
+ */
+const GameObject = memo(function GameObject({
+  bottle,
+  owner,
+  isSelf,
+  locked,
+  engine,
+}: {
+  bottle: Bottle;
+  owner: Player | undefined;
+  isSelf: boolean;
+  locked: boolean;
+  engine: Engine;
+}) {
+  return (
+    <button
+      ref={(element) => {
+        if (element) engine.bottles.current.set(bottle.id, element);
+        else engine.bottles.current.delete(bottle.id);
+      }}
+      className={'game-bottle' + (bottle.sorted ? ' sorted' : '') + (bottle.lock ? ' held' : '')}
+      data-bottle={bottle.id}
+      data-color={bottle.color}
+      data-sorted={bottle.sorted}
+      data-owner={bottle.lock?.playerId ?? ''}
+      aria-label={
+        COLOR_META[bottle.color].label + ' ' + bottle.id + (bottle.sorted ? ', rangé' : '')
+      }
+      aria-disabled={bottle.sorted || locked || Boolean(owner && !isSelf)}
+      tabIndex={bottle.sorted ? -1 : 0}
+      onPointerDown={(event) => engine.grabBottle(event, bottle)}
+      onKeyDown={(event) => {
+        if (event.key === ' ' || event.key === 'Enter') {
+          event.preventDefault();
+          engine.keyboardGrab(bottle);
+        }
+      }}
+      style={{ '--owner-color': owner?.color ?? 'transparent' } as CSSProperties}
+    >
+      <ObjectArt color={bottle.color} shape={bottle.shape} />
+      {owner && <span className="bottle-owner">{isSelf ? 'Vous' : owner.nickname}</span>}
+      {bottle.sorted && <span className="sorted-spark">✦</span>}
+    </button>
+  );
+});
+
+function Crate({ bin, stored, onDrop }: { bin: Bin; stored: number; onDrop: () => void }) {
+  const meta = COLOR_META[bin.color];
+  return (
+    <button
+      className="sorting-bin"
+      data-bin={bin.color}
+      data-edge={bin.edge}
+      aria-label={'Bac ' + meta.label + ', ' + stored + ' rangés'}
+      onClick={onDrop}
+      style={
+        {
+          left: bin.x * 100 + '%',
+          top: bin.y * 100 + '%',
+          width: bin.width * 100 + '%',
+          height: bin.height * 100 + '%',
+          '--bin-color': meta.hex,
+        } as CSSProperties
+      }
+    >
+      <span className="bin-label">
+        <i>{meta.symbol}</i>
+        {meta.label}
+      </span>
+      {stored > 0 && <span className="bin-count">{stored}</span>}
+      <span className="bin-bottom" />
+    </button>
+  );
+}
 
 function elapsedLabel(ms: number) {
   const seconds = Math.floor(ms / 1000);
   return Math.floor(seconds / 60) + ':' + String(seconds % 60).padStart(2, '0');
 }
+
+/**
+ * The clock owns its own state. Ticking it inside the board would rebuild every object's
+ * element once a second, which is pure waste on a board holding hundreds of them.
+ */
+function Elapsed({ startedAt, finishedAt }: { startedAt: number; finishedAt: number | null }) {
+  const [now, setNow] = useState(Date.now);
+  useEffect(() => {
+    if (finishedAt !== null) return;
+    const interval = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(interval);
+  }, [finishedAt]);
+  return <>{elapsedLabel(Math.max(0, (finishedAt ?? now) - startedAt))}</>;
+}
 export function SortingBoard({ room }: { room: RoomState }) {
   const { session, status, command, notify } = useRealtime();
   const engine = useBoardEngine(room);
-  const [now, setNow] = useState(Date.now());
   const [restarting, setRestarting] = useState(false);
   const game = room.game!;
   const sortedCount = game.bottles.filter((b) => b.sorted).length;
   const finished = room.status === 'finished';
-  useEffect(() => {
-    const interval = setInterval(() => setNow(Date.now()), 1000);
-    return () => clearInterval(interval);
-  }, []);
+  const storedPerColor = useMemo(() => {
+    const counts = new Map<string, number>();
+    for (const bottle of game.bottles)
+      if (bottle.sorted) counts.set(bottle.color, (counts.get(bottle.color) ?? 0) + 1);
+    return counts;
+  }, [game.bottles]);
+  const players = useMemo(() => new Map(room.players.map((p) => [p.id, p])), [room.players]);
   return (
     <section className="game-session">
       <div className="game-toolbar">
@@ -40,7 +144,7 @@ export function SortingBoard({ room }: { room: RoomState }) {
         </div>
         <div className="game-timer">
           <Clock3 size={16} />
-          {elapsedLabel(Math.max(0, (game.finishedAt ?? now) - game.startedAt))}
+          <Elapsed startedAt={game.startedAt} finishedAt={game.finishedAt} />
         </div>
       </div>
       <div className="progress-row">
@@ -67,7 +171,7 @@ export function SortingBoard({ room }: { room: RoomState }) {
         <div
           className="sorting-board"
           data-testid="sorting-board"
-          data-dense={game.bottles.length >= 40}
+          style={{ '--object-size': objectWidth(game.bottles.length) * 100 + '%' } as CSSProperties}
           ref={engine.boardRef}
           onPointerMove={engine.onPointerMove}
           onPointerLeave={engine.onPointerLeave}
@@ -76,81 +180,27 @@ export function SortingBoard({ room }: { room: RoomState }) {
           onLostPointerCapture={engine.onLostPointerCapture}
         >
           <div className="board-grain" />
-          {getBins(room.settings.colorCount).map((bin) => (
-            <button
-              className="sorting-bin"
+          {game.bins.map((bin) => (
+            <Crate
               key={bin.color}
-              data-bin={bin.color}
-              aria-label={'Bac ' + COLOR_META[bin.color].label}
-              onClick={() =>
+              bin={bin}
+              stored={storedPerColor.get(bin.color) ?? 0}
+              onDrop={() =>
                 engine.keyboardDrop({ x: bin.x + bin.width / 2, y: bin.y + bin.height / 2 })
               }
-              style={
-                {
-                  left: bin.x * 100 + '%',
-                  top: bin.y * 100 + '%',
-                  width: bin.width * 100 + '%',
-                  height: bin.height * 100 + '%',
-                  '--bin-color': COLOR_META[bin.color].hex,
-                } as CSSProperties
-              }
-            >
-              <span className="bin-label">
-                <i>{COLOR_META[bin.color].symbol}</i>
-                {COLOR_META[bin.color].label}
-              </span>
-              <span className="bin-bottom" />
-            </button>
+            />
           ))}
-          <div className="board-divider">
-            <span>UNE COULEUR, UNE PLACE</span>
-          </div>
           {game.bottles.map((bottle) => {
-            const owner = room.players.find((p) => p.id === bottle.lock?.playerId);
+            const owner = bottle.lock ? players.get(bottle.lock.playerId) : undefined;
             return (
-              <button
+              <GameObject
                 key={bottle.id}
-                ref={(element) => {
-                  if (element) engine.bottles.current.set(bottle.id, element);
-                  else engine.bottles.current.delete(bottle.id);
-                }}
-                className={
-                  'game-bottle' + (bottle.sorted ? ' sorted' : '') + (bottle.lock ? ' held' : '')
-                }
-                data-bottle={bottle.id}
-                data-color={bottle.color}
-                data-sorted={bottle.sorted}
-                data-owner={bottle.lock?.playerId ?? ''}
-                aria-label={
-                  'Bouteille ' +
-                  COLOR_META[bottle.color].label +
-                  ' ' +
-                  bottle.id +
-                  (bottle.sorted ? ', rangée' : '')
-                }
-                aria-disabled={
-                  bottle.sorted ||
-                  status !== 'connected' ||
-                  Boolean(owner && owner.id !== session?.id)
-                }
-                tabIndex={bottle.sorted ? -1 : 0}
-                onPointerDown={(event) => engine.grabBottle(event, bottle)}
-                onKeyDown={(event) => {
-                  if (event.key === ' ' || event.key === 'Enter') {
-                    event.preventDefault();
-                    engine.keyboardGrab(bottle);
-                  }
-                }}
-                style={{ '--owner-color': owner?.color ?? 'transparent' } as CSSProperties}
-              >
-                <BottleArt color={bottle.color} shape={bottle.shape} />
-                {owner && (
-                  <span className="bottle-owner">
-                    {owner.id === session?.id ? 'Vous' : owner.nickname}
-                  </span>
-                )}
-                {bottle.sorted && <span className="sorted-spark">✦</span>}
-              </button>
+                bottle={bottle}
+                owner={owner}
+                isSelf={owner?.id === session?.id}
+                locked={status !== 'connected'}
+                engine={engine}
+              />
             );
           })}
           {room.players

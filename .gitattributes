@@ -1,0 +1,10 @@
+# Line endings are decided by the repository, not by each contributor's core.autocrlf.
+# Everything here is text and is stored and checked out with LF, so Linux images and
+# any future shell script behave identically on Windows, macOS and CI.
+* text=auto eol=lf
+
+*.png binary
+*.jpg binary
+*.ico binary
+*.woff binary
+*.woff2 binary

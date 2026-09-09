@@ -279,7 +279,19 @@
   color: #9da58e;
   font-size: 10px;
 }
+/*
+ * Crates sit on all four borders, so the whole board has to be reachable without
+ * scrolling: an object or a crate below the fold simply cannot be dragged. The width is
+ * therefore capped by the height left over, keeping the 12:7 ratio. --board-chrome is
+ * everything above and below the board; it shrinks on short screens, where the title and
+ * the progress row are tightened rather than stealing the play area.
+ */
+.game-session {
+  --board-chrome: 380px;
+}
 .board-wrap {
+  width: min(100%, calc((100dvh - var(--board-chrome)) * 12 / 7 + 26px));
+  margin-inline: auto;
   padding: 12px;
   border: 1px solid #d9d3bc;
   border-radius: 19px;
@@ -385,6 +397,35 @@
      compositing layers and cost far more memory than the animation saves. */
   transform-origin: center;
   transition: filter 0.2s;
+}
+/* Reclaim vertical space on laptops instead of shrinking the board any further. */
+@media (max-height: 940px) {
+  .game-session {
+    --board-chrome: 300px;
+  }
+  .game-toolbar {
+    margin-bottom: 14px;
+  }
+  .game-toolbar h1 {
+    font-size: 27px;
+  }
+  .game-toolbar .eyebrow {
+    display: none;
+  }
+  .progress-row {
+    margin-bottom: 11px;
+  }
+  .board-instructions {
+    margin-top: 8px;
+  }
+}
+@media (max-height: 780px) {
+  .game-session {
+    --board-chrome: 340px;
+  }
+  .board-instructions span:last-child {
+    display: none;
+  }
 }
 .game-bottle:hover:not(.sorted) .bottle-art {
   filter: drop-shadow(2px 4px 4px #50614140);

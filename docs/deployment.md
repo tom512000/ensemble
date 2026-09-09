@@ -92,3 +92,40 @@ L'`overrides` du dépôt relève l'esbuild de premier niveau (celui de Vite et V
 puisse réellement exposer un serveur de développement) en 0.28.
 
 À revoir lorsque `drizzle-kit` abandonnera `@esbuild-kit` au profit de `tsx`, dont il dépend déjà.
+
+## Scripts du serveur
+
+Le workflow `deploy-prod.yml` ouvre une session SSH **sans commande** : la clé de déploiement
+porte une commande forcée côté serveur (`command="/usr/local/bin/deploy-ensemble"` dans
+`authorized_keys`). C'est une bonne pratique — la clé ne peut rien faire d'autre — mais elle a une
+conséquence : le script de déploiement vit sur le serveur et n'est visible ni dans le dépôt, ni
+dans une revue de code. S'il appelle un outil absent, le déploiement échoue avec un code 127
+(`command not found`) alors que la construction des images a parfaitement réussi.
+
+`infra/backup-ensemble` est versionné ici pour cette raison. Il est appelé par `deploy-ensemble`
+avant la migration. Installation, puis vérification à blanc :
+
+```sh
+sudo install -m 755 infra/backup-ensemble /usr/local/bin/backup-ensemble
+sudo ENSEMBLE_DIR=/opt/ensemble /usr/local/bin/backup-ensemble
+```
+
+| Variable     | Rôle                                | Défaut                  |
+| ------------ | ----------------------------------- | ----------------------- |
+| ENSEMBLE_DIR | Répertoire contenant `compose.yaml` | `/opt/ensemble`         |
+| BACKUP_DIR   | Destination des sauvegardes         | `/var/backups/ensemble` |
+| BACKUP_KEEP  | Nombre de sauvegardes conservées    | `14`                    |
+
+Le script écrit d'abord un fichier `.part` puis le renomme, afin qu'une sauvegarde interrompue ne
+puisse jamais passer pour une sauvegarde valide. Un dump vide ou un `pg_dump` en échec arrête le
+déploiement **avant** la migration. Au tout premier déploiement, quand aucun conteneur de base
+n'existe encore, il n'y a rien à protéger : le script le signale et rend la main.
+
+Une sauvegarde n'a de valeur qu'une fois restaurée. À tester au moins une fois :
+
+```sh
+gunzip -c /var/backups/ensemble/ensemble-AAAAMMJJ-HHMMSS.sql.gz \
+  | docker compose exec -T db psql -U ensemble -d ensemble
+```
+
+`deploy-ensemble` gagnerait à rejoindre `infra/` pour la même raison.

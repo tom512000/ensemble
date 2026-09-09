@@ -1,0 +1,68 @@
+#!/usr/bin/env bash
+# Dump the Ensemble database before a migration runs.
+#
+# Installed on the server as /usr/local/bin/backup-ensemble, where deploy-ensemble calls it.
+# Keeping it in the repository means it is reviewed, versioned and reinstallable, instead of
+# existing only on one machine.
+#
+# Environment (all optional):
+#   ENSEMBLE_DIR      project checkout holding compose.yaml   (default: /opt/ensemble)
+#   BACKUP_DIR        where dumps are written                 (default: /var/backups/ensemble)
+#   BACKUP_KEEP       how many dumps to keep                  (default: 14)
+set -euo pipefail
+
+project_dir="${ENSEMBLE_DIR:-/opt/ensemble}"
+backup_dir="${BACKUP_DIR:-/var/backups/ensemble}"
+keep="${BACKUP_KEEP:-14}"
+
+if [ ! -f "$project_dir/compose.yaml" ]; then
+  echo "backup-ensemble: no compose.yaml in $project_dir (set ENSEMBLE_DIR)" >&2
+  exit 1
+fi
+cd "$project_dir"
+
+# The password lives in the server's .env, which is never committed.
+if [ -f .env ]; then
+  set -a
+  # shellcheck disable=SC1091
+  . ./.env
+  set +a
+fi
+
+# On a first deploy there is no database yet, so there is nothing to protect: say so and
+# continue. Once the container exists, a failed dump must stop the deploy.
+if [ -z "$(docker compose ps -q db 2>/dev/null)" ]; then
+  echo "backup-ensemble: no db container yet, nothing to back up"
+  exit 0
+fi
+
+mkdir -p "$backup_dir"
+stamp="$(date -u +%Y%m%d-%H%M%S)"
+target="$backup_dir/ensemble-$stamp.sql.gz"
+
+echo "backup-ensemble: dumping to $target"
+# Write to a temporary file first so a partial dump is never mistaken for a good one.
+if ! PGPASSWORD="${POSTGRES_PASSWORD:-ensemble_dev}" docker compose exec -T db \
+  pg_dump -U "${POSTGRES_USER:-ensemble}" -d "${POSTGRES_DB:-ensemble}" \
+  | gzip -c > "$target.part"; then
+  rm -f "$target.part"
+  echo "backup-ensemble: pg_dump failed, aborting before migration" >&2
+  exit 1
+fi
+
+# gzip of an empty dump is still ~20 bytes, so check for real content.
+if [ "$(stat -c %s "$target.part")" -lt 100 ]; then
+  rm -f "$target.part"
+  echo "backup-ensemble: dump looks empty, aborting before migration" >&2
+  exit 1
+fi
+
+mv "$target.part" "$target"
+echo "backup-ensemble: wrote $(du -h "$target" | cut -f1)"
+
+# Keep the most recent dumps only. Sorted by the timestamp in the name rather than by
+# modification time, so copying or touching a file cannot change what gets pruned.
+ls -1 "$backup_dir"/ensemble-*.sql.gz 2>/dev/null | sort -r | tail -n "+$((keep + 1))" | while read -r old; do
+  echo "backup-ensemble: removing $old"
+  rm -f "$old"
+done

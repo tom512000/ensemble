@@ -1649,3 +1649,40 @@ input[type='range'] {
     transition-duration: 0.01ms !important;
   }
 }
+
+/* Aperçu du jeu d'observation dans la collection. */
+.crowd-illustration {
+  position: relative;
+  display: grid;
+  place-items: center;
+  padding: 18px 10px 6px;
+}
+.crowd-illustration-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 6px 10px;
+  width: min(100%, 240px);
+}
+.crowd-illustration-grid > span {
+  display: block;
+  transform: rotate(var(--r, 0deg));
+}
+.crowd-illustration-grid > span:nth-child(2) {
+  --r: -7deg;
+}
+.crowd-illustration-grid > span:nth-child(4) {
+  --r: 6deg;
+}
+.crowd-illustration-grid > span:nth-child(6) {
+  --r: -4deg;
+}
+.crowd-illustration-grid .crowd-lone {
+  position: relative;
+}
+.crowd-illustration-grid .crowd-lone::after {
+  content: '';
+  position: absolute;
+  inset: -8%;
+  border: 2px dashed #b8614d99;
+  border-radius: 50%;
+}

@@ -1,33 +1,58 @@
 import { useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link, useNavigate, useParams } from 'react-router-dom';
 import { ArrowLeft, ArrowRight, Heart, Plus, UsersRound } from 'lucide-react';
-import { DEFAULT_SETTINGS, type RoomSettings } from '@ensemble/shared';
+import {
+  DEFAULT_BY_GAME,
+  GAME_IDS,
+  gameMeta,
+  type GameId,
+  type RoomSettings,
+} from '@ensemble/shared';
 import { errorMessage, useRealtime } from '../lib/realtime';
 import { Modal, NicknameForm, SettingsFields } from '../components/ui';
 import { SortingIllustration } from '../components/ObjectArt';
 export function GamePage() {
   const { rooms, session, status, command } = useRealtime();
   const navigate = useNavigate();
+  const params = useParams<{ gameId: string }>();
+  const gameId = (GAME_IDS as readonly string[]).includes(params.gameId ?? '')
+    ? (params.gameId as GameId)
+    : null;
   const [createOpen, setCreateOpen] = useState(false);
-  const [settings, setSettings] = useState<RoomSettings>({ ...DEFAULT_SETTINGS });
+  const [settings, setSettings] = useState<RoomSettings>(() => ({
+    ...DEFAULT_BY_GAME[gameId ?? 'sorting'],
+  }));
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
   const [filter, setFilter] = useState<'lobby' | 'all'>('lobby');
+  const meta = gameMeta(gameId ?? 'sorting');
   const sortingRooms = rooms.filter(
-    (room) => room.gameId === 'sorting' && (filter === 'all' || room.status === 'lobby'),
+    (room) => room.gameId === gameId && (filter === 'all' || room.status === 'lobby'),
   );
   async function create() {
     setBusy(true);
     setError('');
     try {
-      const result = await command({ type: 'room:create', gameId: 'sorting', settings });
-      void navigate('/games/sorting/rooms/' + result.code);
+      const result = await command({ type: 'room:create', gameId: gameId!, settings });
+      void navigate('/games/' + gameId + '/rooms/' + result.code);
     } catch (error) {
       setError(errorMessage(error));
     } finally {
       setBusy(false);
     }
   }
+  if (!gameId)
+    return (
+      <main className="page-container">
+        <div className="empty-state">
+          <h1>Ce jeu n’existe pas.</h1>
+          <p>Il est peut-être encore en préparation.</p>
+          <Link className="button secondary" to="/">
+            Voir la collection
+          </Link>
+        </div>
+      </main>
+    );
   return (
     <main className="page-container">
       <Link className="back-link" to="/">
@@ -36,15 +61,12 @@ export function GamePage() {
       </Link>
       <section className="game-intro">
         <div>
-          <p className="eyebrow">LE PETIT PLAISIR DE TOUT RANGER</p>
+          <p className="eyebrow">{meta.tagline}</p>
           <h1>
-            À sa place<span className="accent-dot">.</span>
+            {meta.name}
+            <span className="accent-dot">.</span>
           </h1>
-          <p>
-            Un peu de bazar, beaucoup de douceur. Retrouvez les bonnes
-            <br className="desktop-only" /> couleurs et remettez le monde en ordre, une bouteille à
-            la fois.
-          </p>
+          <p>{meta.description}</p>
           <div className="game-tags">
             <span>
               <UsersRound size={16} />
@@ -91,8 +113,16 @@ export function GamePage() {
                 <div className="room-row-title">
                   <h3>La table de {room.hostName}</h3>
                   <p>
-                    {room.settings.bottleCount} bouteilles · {room.settings.colorCount} couleurs ·{' '}
-                    {room.code}
+                    {room.settings.game === 'wanted'
+                      ? room.settings.levels +
+                        ' niveaux · ' +
+                        room.settings.startHeads +
+                        ' têtes au départ'
+                      : room.settings.bottleCount +
+                        ' objets · ' +
+                        room.settings.colorCount +
+                        ' couleurs'}{' '}
+                    · {room.code}
                   </p>
                 </div>
                 <span className={'status-chip ' + room.status}>
@@ -109,7 +139,7 @@ export function GamePage() {
                 {room.status === 'lobby' && room.playerCount < room.settings.maxPlayers ? (
                   <Link
                     className="button secondary compact"
-                    to={'/games/sorting/rooms/' + room.code}
+                    to={'/games/' + room.gameId + '/rooms/' + room.code}
                   >
                     Rejoindre <ArrowRight size={16} />
                   </Link>

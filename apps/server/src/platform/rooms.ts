@@ -1,6 +1,8 @@
 import { randomInt, randomUUID } from 'node:crypto';
 import {
   LOCK_TTL_MS,
+  type GameId,
+  type GameState,
   PLAYER_COLORS,
   RECONNECT_GRACE_MS,
   type Bottle,
@@ -13,22 +15,35 @@ import {
   type SortingState,
 } from '@ensemble/shared';
 import { grab, owns, release, sortingGame } from '../games/sorting.js';
+import { createWanted, pickHead, type WantedInternal } from '../games/wanted.js';
+
 import { requireCondition } from './errors.js';
 import type { Session, SessionStore } from './sessions.js';
 
 interface Member extends Player {
   disconnectedAt: number | null;
 }
+/** L'état serveur ajoute au contrat public ce que les joueurs ne doivent pas voir. */
+type ServerGame = ({ game: 'sorting' } & SortingState) | ({ game: 'wanted' } & WantedInternal);
+
+/** Le sorting est déjà public tel quel ; le wanted cache la réponse. */
+function publicGame(game: ServerGame | null): GameState | null {
+  if (!game) return null;
+  if (game.game === 'sorting') return structuredClone(game);
+  const { targetId, ...visible } = structuredClone(game);
+  return visible;
+}
+
 interface Room {
   id: string;
   code: string;
-  gameId: 'sorting';
+  gameId: GameId;
   hostId: string;
   createdAt: number;
   status: RoomState['status'];
   settings: RoomSettings;
   players: Map<string, Member>;
-  game: SortingState | null;
+  game: ServerGame | null;
   contributors: Map<string, Player>;
 }
 export interface CompletedResult {
@@ -66,7 +81,7 @@ export class RoomManager {
   }
   snapshot(code: string): RoomState {
     const room = this.get(code);
-    return { ...this.summary(room), players: this.players(room), game: structuredClone(room.game) };
+    return { ...this.summary(room), players: this.players(room), game: publicGame(room.game) };
   }
   private players(room: Room): Player[] {
     return [...room.players.values()].map(({ disconnectedAt: _disconnectedAt, ...player }) => ({
@@ -135,7 +150,7 @@ export class RoomManager {
     const room: Room = {
       id: randomUUID(),
       code,
-      gameId: 'sorting',
+      gameId: settings.game,
       hostId: session.id,
       createdAt: this.now(),
       status: 'lobby',
@@ -233,7 +248,7 @@ export class RoomManager {
     this.changed(room);
   }
   private unlockPlayer(room: Room, playerId: string) {
-    for (const bottle of room.game?.bottles ?? []) {
+    for (const bottle of room.game?.game === 'sorting' ? room.game.bottles : []) {
       if (bottle.lock?.playerId === playerId) {
         bottle.lock = null;
         bottle.position = { ...bottle.home };
@@ -256,6 +271,11 @@ export class RoomManager {
       'Les réglages sont disponibles avant le départ.',
     );
     requireCondition(
+      settings.game === room.gameId,
+      'INVALID_PAYLOAD',
+      'Ces réglages ne sont pas ceux de ce jeu.',
+    );
+    requireCondition(
       settings.maxPlayers >= room.players.size,
       'CAPACITY_TOO_SMALL',
       'La capacité doit accueillir les joueurs déjà présents.',
@@ -266,7 +286,10 @@ export class RoomManager {
   start(session: Session, code: string) {
     const room = this.host(session, code);
     requireCondition(room.status === 'lobby', 'NOT_LOBBY', 'Cette partie a déjà commencé.');
-    room.game = sortingGame.create(room.settings, this.now());
+    room.game =
+      room.settings.game === 'wanted'
+        ? { game: 'wanted', ...createWanted(room.settings, this.now()) }
+        : { game: 'sorting', ...sortingGame.create(room.settings, this.now()) };
     room.status = 'playing';
     room.contributors.clear();
     for (const player of room.players.values()) player.sorted = 0;
@@ -288,7 +311,7 @@ export class RoomManager {
   private playing(session: Session, code: string, roundId: string, bottleId: string) {
     const room = this.member(session, code);
     requireCondition(
-      room.status === 'playing' && room.game?.roundId === roundId,
+      room.status === 'playing' && room.game?.game === 'sorting' && room.game.roundId === roundId,
       'NOT_PLAYING',
       'Cette manche n’est plus en cours.',
     );
@@ -299,6 +322,12 @@ export class RoomManager {
   handle(session: Session, command: Command): { code?: string } {
     switch (command.type) {
       case 'room:create':
+        // Un client ne peut pas annoncer un jeu et envoyer les réglages d'un autre.
+        requireCondition(
+          command.gameId === command.settings.game,
+          'INVALID_PAYLOAD',
+          'Les réglages ne correspondent pas au jeu demandé.',
+        );
         return { code: this.create(session, command.settings) };
       case 'room:join':
         this.join(session, command.code);
@@ -318,12 +347,55 @@ export class RoomManager {
       case 'game:restart':
         this.restart(session, command.code);
         return {};
+      case 'wanted:pick': {
+        const room = this.member(session, command.code);
+        requireCondition(
+          room.status === 'playing' &&
+            room.game?.game === 'wanted' &&
+            room.game.roundId === command.roundId,
+          'NOT_PLAYING',
+          'Cette manche n’est plus en cours.',
+        );
+        const game = room.game as { game: 'wanted' } & WantedInternal;
+        requireCondition(
+          room.settings.game === 'wanted',
+          'NOT_PLAYING',
+          'Cette manche n’est plus en cours.',
+        );
+        const outcome = pickHead(game, room.settings, session.id, command.headId, this.now());
+        if (outcome.correct) {
+          const player = room.players.get(session.id)!;
+          player.sorted++;
+          room.contributors.set(session.id, { ...player, disconnectedAt: undefined } as Player);
+        }
+        if (outcome.correct && outcome.finished) {
+          room.status = 'finished';
+          for (const player of this.players(room)) room.contributors.set(player.id, player);
+          this.hooks.finished({
+            id: game.roundId,
+            roomId: room.id,
+            code: room.code,
+            gameId: room.gameId,
+            settings: { ...room.settings },
+            startedAt: game.startedAt,
+            finishedAt: game.finishedAt ?? this.now(),
+            players: [...room.contributors.values()],
+          });
+        }
+        this.changed(room);
+        return {};
+      }
       default: {
         const { room, bottle, game } = this.playing(
           session,
           command.code,
           command.roundId,
           command.bottleId,
+        );
+        requireCondition(
+          room.settings.game === 'sorting',
+          'NOT_PLAYING',
+          'Cette manche n’est plus en cours.',
         );
         if (command.type === 'bottle:grab') {
           requireCondition(
@@ -413,7 +485,7 @@ export class RoomManager {
           if (session) this.leave(session, room.code);
         }
       }
-      for (const bottle of room.game?.bottles ?? []) {
+      for (const bottle of room.game?.game === 'sorting' ? room.game.bottles : []) {
         if (bottle.lock && bottle.lock.expiresAt <= now) {
           bottle.lock = null;
           bottle.position = { ...bottle.home };

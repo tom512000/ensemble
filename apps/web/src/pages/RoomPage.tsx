@@ -1,10 +1,11 @@
 import { useEffect, useRef, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { ArrowLeft, ArrowRight, Crown, Leaf, LoaderCircle, LogOut, UsersRound } from 'lucide-react';
-import type { RoomSettings, RoomState } from '@ensemble/shared';
+import { gameMeta, type RoomSettings, type RoomState } from '@ensemble/shared';
 import { errorMessage, useRealtime } from '../lib/realtime';
 import { Avatar, CopyInvite, NicknameForm, SettingsFields } from '../components/ui';
 import { SortingBoard } from '../games/sorting/SortingBoard';
+import { WantedBoard } from '../games/wanted/WantedBoard';
 
 function Lobby({ room }: { room: RoomState }) {
   const { session, command, status } = useRealtime();
@@ -12,19 +13,12 @@ function Lobby({ room }: { room: RoomState }) {
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
   const host = session?.id === room.hostId;
+  // On ne recopie que lorsque les réglages changent réellement, pour ne pas écraser une
+  // saisie de l'hôte à chaque room:state (arrivée d'un joueur, etc.).
+  const settingsKey = JSON.stringify(room.settings);
   useEffect(() => {
-    setSettings({
-      bottleCount: room.settings.bottleCount,
-      maxPlayers: room.settings.maxPlayers,
-      colorCount: room.settings.colorCount,
-      shapeCount: room.settings.shapeCount,
-    });
-  }, [
-    room.settings.bottleCount,
-    room.settings.maxPlayers,
-    room.settings.colorCount,
-    room.settings.shapeCount,
-  ]); // synchronized host edits
+    setSettings(JSON.parse(settingsKey) as RoomSettings);
+  }, [settingsKey]);
   const changed = JSON.stringify(settings) !== JSON.stringify(room.settings);
   async function apply(start: boolean) {
     setBusy(true);
@@ -44,7 +38,7 @@ function Lobby({ room }: { room: RoomState }) {
         <p className="eyebrow">BIENVENUE À LA TABLE</p>
         <h1>On s’installe ?</h1>
         <p className="muted">Invitez vos proches. Le rangement peut attendre encore un peu.</p>
-        <CopyInvite code={room.code} />
+        <CopyInvite code={room.code} gameId={room.gameId} />
         <div className="players-heading">
           <h3>La petite équipe</h3>
           <span>
@@ -131,8 +125,9 @@ function Lobby({ room }: { room: RoomState }) {
   );
 }
 export function RoomPage() {
-  const params = useParams<{ code: string }>();
+  const params = useParams<{ code: string; gameId: string }>();
   const code = (params.code ?? '').toUpperCase();
+  const gameId = params.gameId ?? 'sorting';
   const { session, status, room, command, clearRoom } = useRealtime();
   const [error, setError] = useState('');
   const [retry, setRetry] = useState(0);
@@ -168,7 +163,7 @@ export function RoomPage() {
   if (!session)
     return (
       <main className="page-container">
-        <Link className="back-link" to="/games/sorting">
+        <Link className="back-link" to={'/games/' + gameId}>
           <ArrowLeft size={16} />
           Les tables
         </Link>
@@ -206,7 +201,7 @@ export function RoomPage() {
           ) : (
             <LoaderCircle className="spin" />
           )}
-          <Link className="back-link" to="/games/sorting">
+          <Link className="back-link" to={'/games/' + gameId}>
             <ArrowLeft size={16} />
             Voir les tables
           </Link>
@@ -216,8 +211,8 @@ export function RoomPage() {
   return (
     <main className={'page-container room-page ' + (playing ? 'in-game' : '')}>
       <div className="room-topline">
-        <Link className="back-link" to="/games/sorting">
-          À sa place <span>/</span>Table {room.code}
+        <Link className="back-link" to={'/games/' + room.gameId}>
+          {gameMeta(room.gameId).name} <span>/</span>Table {room.code}
         </Link>
         <button
           className="text-button"
@@ -230,9 +225,11 @@ export function RoomPage() {
       </div>
       {room.status === 'lobby' ? (
         <Lobby room={room} />
-      ) : (
-        <SortingBoard key={room.game!.roundId} room={room} />
-      )}
+      ) : room.game?.game === 'wanted' ? (
+        <WantedBoard key={room.game.roundId} room={room} game={room.game} />
+      ) : room.game?.game === 'sorting' ? (
+        <SortingBoard key={room.game.roundId} room={room} game={room.game} />
+      ) : null}
     </main>
   );
 }

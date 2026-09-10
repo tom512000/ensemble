@@ -7,6 +7,8 @@
 - [x] 5. Interface responsive, animations, erreurs, accessibilité et réduction des mouvements.
 - [x] 6. Tests métier et réseau réels, scénario navigateur à deux joueurs, typecheck, lint, build.
 - [x] 7. PostgreSQL / Drizzle, migrations, conteneurs et documentation.
+- [x] 9. Second jeu « Tout seul » sur la même plateforme : rooms, lobby, présence et
+      invitations réutilisés tels quels, sans rien réécrire.
 - [ ] 8. Déploiement public : reporté par choix. Tout est prêt côté projet (image Docker
       vérifiée, compose complet, variables documentées) ; il ne manque que la cible
       d’hébergement et ses accès. Voir docs/deployment.md.
@@ -26,7 +28,6 @@
 
 ## Suite possible
 
-- Deuxième jeu via `GameDefinition`, en réutilisant rooms, lobby, présence et curseurs.
 - Sons (attraper, poser, ranger) : l’architecture les prévoit, le MVP ne les inclut pas.
 - Comptes, profils, statistiques et historique au-dessus des sessions invitées.
 - Redis et plusieurs instances lorsque la charge le justifie (voir `docs/architecture.md`).

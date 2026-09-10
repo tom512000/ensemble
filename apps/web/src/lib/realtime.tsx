@@ -114,12 +114,14 @@ export function RealtimeProvider({ children }: { children: ReactNode }) {
           previous.game.roundId !== update.roundId
         )
           return previous;
+        if (previous.game.game !== 'sorting') return previous;
+        const game = previous.game;
         return {
           ...previous,
           players: update.players,
           game: {
-            ...previous.game,
-            bottles: previous.game.bottles.map((bottle) =>
+            ...game,
+            bottles: game.bottles.map((bottle) =>
               bottle.id === update.bottle.id ? update.bottle : bottle,
             ),
           },

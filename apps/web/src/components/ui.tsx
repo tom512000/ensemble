@@ -12,8 +12,14 @@ import {
   MAX_SHAPES,
   nicknameSchema,
   SHAPES,
+  WANTED_HEADS,
+  WANTED_LEVELS,
+  WANTED_PACES,
+  type GameId,
   type Player,
   type RoomSettings,
+  type SortingSettings,
+  type WantedSettings,
 } from '@ensemble/shared';
 import { errorMessage, useRealtime } from '../lib/realtime';
 
@@ -106,14 +112,14 @@ export function NicknameForm({ onDone }: { onDone?: () => void }) {
     </form>
   );
 }
-export function SettingsFields({
+function SortingFields({
   value,
   onChange,
   disabled = false,
   minimumPlayers = 2,
 }: {
-  value: RoomSettings;
-  onChange: (value: RoomSettings) => void;
+  value: SortingSettings;
+  onChange: (value: SortingSettings) => void;
   disabled?: boolean;
   minimumPlayers?: number;
 }) {
@@ -203,6 +209,122 @@ export function SettingsFields({
     </div>
   );
 }
+const PACE_LABELS: Record<(typeof WANTED_PACES)[number], string> = {
+  douce: 'Douce — on prend le temps',
+  normale: 'Normale — ça monte bien',
+  corsee: 'Corsée — pour les yeux aiguisés',
+};
+
+function WantedFields({
+  value,
+  onChange,
+  disabled = false,
+  minimumPlayers = 2,
+}: {
+  value: WantedSettings;
+  onChange: (value: WantedSettings) => void;
+  disabled?: boolean;
+  minimumPlayers?: number;
+}) {
+  return (
+    <div className="settings-fields">
+      <label>
+        Têtes au premier niveau <strong>{value.startHeads}</strong>
+        <input
+          aria-label="Têtes au premier niveau"
+          type="range"
+          min={WANTED_HEADS.min}
+          max={40}
+          step="1"
+          value={value.startHeads}
+          disabled={disabled}
+          onChange={(e) => onChange({ ...value, startHeads: Number(e.target.value) })}
+        />
+      </label>
+      <label>
+        Niveaux à franchir <strong>{value.levels}</strong>
+        <input
+          aria-label="Niveaux à franchir"
+          type="range"
+          min={WANTED_LEVELS.min}
+          max={WANTED_LEVELS.max}
+          step="1"
+          value={value.levels}
+          disabled={disabled}
+          onChange={(e) => onChange({ ...value, levels: Number(e.target.value) })}
+        />
+      </label>
+      <div className="field-pair">
+        <label>
+          Places à la table
+          <select
+            aria-label="Nombre maximal de joueurs"
+            disabled={disabled}
+            value={value.maxPlayers}
+            onChange={(e) => onChange({ ...value, maxPlayers: Number(e.target.value) })}
+          >
+            {[2, 3, 4, 5, 6, 7, 8]
+              .filter((n) => n >= minimumPlayers)
+              .map((n) => (
+                <option key={n} value={n}>
+                  {n} joueurs
+                </option>
+              ))}
+          </select>
+        </label>
+        <label>
+          Montée en difficulté
+          <select
+            aria-label="Montée en difficulté"
+            disabled={disabled}
+            value={value.pace}
+            onChange={(e) => onChange({ ...value, pace: e.target.value as WantedSettings['pace'] })}
+          >
+            {WANTED_PACES.map((pace) => (
+              <option key={pace} value={pace}>
+                {PACE_LABELS[pace]}
+              </option>
+            ))}
+          </select>
+        </label>
+      </div>
+      <p className="form-hint">
+        La foule grossit, se divise en plus de groupes, et l’intruse finit par ne se distinguer que
+        par un seul détail.
+      </p>
+    </div>
+  );
+}
+
+/** Aiguillage : chaque jeu a ses réglages, le lobby n’a pas à les connaître. */
+export function SettingsFields({
+  value,
+  onChange,
+  disabled = false,
+  minimumPlayers = 2,
+}: {
+  value: RoomSettings;
+  onChange: (value: RoomSettings) => void;
+  disabled?: boolean;
+  minimumPlayers?: number;
+}) {
+  return value.game === 'wanted' ? (
+    <WantedFields
+      value={value}
+      onChange={onChange}
+      disabled={disabled}
+      minimumPlayers={minimumPlayers}
+    />
+  ) : (
+    <SortingFields
+      value={value}
+      onChange={onChange}
+      disabled={disabled}
+      minimumPlayers={minimumPlayers}
+    />
+  );
+}
+
 export function Avatar({
   player,
   small = false,
@@ -220,12 +342,12 @@ export function Avatar({
     </span>
   );
 }
-export function CopyInvite({ code }: { code: string }) {
+export function CopyInvite({ code, gameId }: { code: string; gameId: GameId }) {
   const [copied, setCopied] = useState(false);
   const [error, setError] = useState(false);
   const timer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   useEffect(() => () => clearTimeout(timer.current), []);
-  const url = window.location.origin + '/games/sorting/rooms/' + code;
+  const url = window.location.origin + '/games/' + gameId + '/rooms/' + code;
   return (
     <div className="invite-box">
       <div>

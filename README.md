@@ -1,6 +1,6 @@
 # Ensemble
 
-Un hub de mini-jeux coopératifs en temps réel. Le premier jeu, **À sa place**, consiste à ranger
+Un hub de mini-jeux coopératifs en temps réel. **À sa place** consiste à ranger
 des objets en verre dans les bacs de leur couleur. Les deux navigateurs jouent contre le même état
 serveur, avec des curseurs partagés et des prises exclusives.
 
@@ -16,11 +16,12 @@ apps/web/src/
   components/       Interface commune et illustrations
   pages/            Hub, navigateur de rooms, lobby et invitation
   lib/              Session invitée, réponses HTTP robustes, connexion temps réel
-  games/sorting/    Plateau et moteur de rendu / interactions
+  games/sorting/    Plateau de rangement et moteur de rendu / interactions
+  games/wanted/     Foule du jeu d’observation
 apps/web/test/      Tests des réponses HTTP dégradées
 apps/server/src/
   platform/         Sessions, rooms, permissions, budgets réseau
-  games/            Interface GameDefinition et règles du rangement
+  games/            Interface GameDefinition, rangement et observation
   db/               Schéma, migrations et file de résultats
   transport.ts      Adaptation Socket.IO aux services métier
 packages/shared/    Types, schémas Zod, événements, couleurs et coordonnées

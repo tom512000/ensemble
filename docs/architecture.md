@@ -106,3 +106,27 @@ pas le moteur en mémoire. Les interfaces de jeu et de persistance restent sépa
 - https://socket.io/docs/v4/client-offline-behavior/
 - https://orm.drizzle.team/docs/get-started-postgresql
 - https://vite.dev/guide/
+
+## Deux jeux sur une seule plateforme
+
+`GameDefinition` sépare ce qui appartient au jeu de ce qui appartient à la plateforme. Rooms,
+lobby, présence, invitations, reconnexion et transport n'ont pas été retouchés pour accueillir
+le second jeu : seuls le contrat partagé, une entrée dans le catalogue et un module serveur ont
+été ajoutés.
+
+Les réglages forment une union discriminée par `game`, si bien qu'une table porte toujours des
+réglages cohérents avec son jeu. Le serveur refuse une création qui annoncerait un jeu et
+enverrait les réglages d'un autre, ainsi qu'un changement de jeu en cours de lobby.
+
+**Tout seul** : la foule contient plusieurs groupes de têtes identiques et exactement une tête
+sans jumelle. Trois leviers montent ensemble — le nombre de têtes, le nombre de groupes, et
+surtout le nombre de traits qui distinguent l'intruse, qui passe de trois à un seul. C'est ce
+dernier levier qui fait la difficulté réelle.
+
+Chaque groupe compte au moins deux têtes : sans cette garantie, plusieurs têtes seraient « seules »
+et l'énigme n'aurait pas de réponse unique. Les tests couvrent cet invariant à tous les niveaux
+et à tous les rythmes.
+
+La réponse ne quitte jamais le serveur : `targetId` est retiré de l'état diffusé. Elle reste
+déductible en comparant les visages — c'est le principe du jeu — mais aucun client ne peut se
+voir attribuer une trouvaille que le serveur n'a pas validée.

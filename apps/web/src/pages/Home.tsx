@@ -1,15 +1,8 @@
 import { useEffect } from 'react';
 import { Link, useLocation } from 'react-router-dom';
-import {
-  ArrowDown,
-  ArrowRight,
-  Heart,
-  Leaf,
-  MousePointer2,
-  Sparkles,
-  UsersRound,
-} from 'lucide-react';
+import { ArrowDown, ArrowRight, Eye, Heart, Leaf, MousePointer2, UsersRound } from 'lucide-react';
 import { SortingIllustration } from '../components/ObjectArt';
+import { CrowdIllustration } from '../components/HeadArt';
 export function Home() {
   const location = useLocation();
   useEffect(() => {
@@ -114,31 +107,38 @@ export function Home() {
               </div>
             </div>
           </article>
-          <article className="game-card coming-card">
-            <div className="coming-art">
-              <span className="card-badge muted-badge">ÇA MIJOTE…</span>
-              <div className="plant-art">
-                <span className="plant-leaf leaf-a" />
-                <span className="plant-leaf leaf-b" />
-                <span className="plant-leaf leaf-c" />
-                <span className="plant-stem" />
-                <span className="plant-pot" />
-                <span className="plant-spark">✧</span>
-              </div>
-              <span className="art-caption">Les bonnes idées prennent racine.</span>
-            </div>
+          <article className="game-card featured">
+            <Link to="/games/wanted" className="game-art-link" aria-label="Découvrir Tout seul">
+              <span className="card-badge">
+                <span className="presence-dot online" />
+                NOUVEAU !
+              </span>
+              <CrowdIllustration />
+              <span className="art-caption">Une tête n’a pas de jumelle.</span>
+            </Link>
             <div className="game-card-body">
               <div className="game-title-row">
-                <h3>La suite pousse…</h3>
-                <Sparkles size={19} />
+                <h3>Tout seul</h3>
+                <span className="genre">OBSERVATION</span>
               </div>
               <p>
-                De nouvelles façons de s’amuser ensemble
-                <br className="desktop-only" /> arrivent doucement, mais sûrement.
+                Dans la foule, une seule tête n’a pas de jumelle.
+                <br className="desktop-only" /> Trouvez-la, niveau après niveau.
               </p>
               <div className="game-card-bottom">
-                <span className="coming-label">Un peu de patience, beaucoup de surprises.</span>
-                <span className="soon-chip">Bientôt</span>
+                <div className="game-tags">
+                  <span>
+                    <UsersRound size={15} />
+                    2–8 joueurs
+                  </span>
+                  <span>
+                    <Eye size={15} />
+                    Coup d’œil
+                  </span>
+                </div>
+                <Link className="button compact" to="/games/wanted">
+                  Jouer <ArrowRight size={16} />
+                </Link>
               </div>
             </div>
           </article>

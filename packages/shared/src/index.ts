@@ -60,20 +60,76 @@ export const nicknameSchema = z
   .min(2, 'Deux caractères minimum.')
   .max(20, 'Vingt caractères maximum.')
   .regex(/^[\p{L}\p{N} _.'-]+$/u, 'Utilisez des lettres, chiffres, espaces ou tirets.');
-export const settingsSchema = z
+export const GAME_IDS = ['sorting', 'wanted'] as const;
+export type GameId = (typeof GAME_IDS)[number];
+
+/** Traits d'une tête. Deux têtes sont identiques si et seulement si tous leurs traits le sont. */
+export const HEAD_TRAITS = ['skin', 'hair', 'eyes', 'mouth', 'extra', 'hue'] as const;
+export type HeadTrait = (typeof HEAD_TRAITS)[number];
+export const TRAIT_CHOICES: Record<HeadTrait, number> = {
+  skin: 4,
+  hair: 6,
+  eyes: 5,
+  mouth: 5,
+  extra: 4,
+  hue: 5,
+};
+export type HeadLook = Record<HeadTrait, number>;
+export const WANTED_LEVELS = { min: 3, max: 15 } as const;
+export const WANTED_HEADS = { min: 6, max: 120 } as const;
+/** Taille d'une tête, en fraction de la largeur du plateau. Serveur et client s'accordent ici. */
+export function headWidth(count: number): number {
+  const ideal = Math.sqrt((WORLD.width * WORLD.height * 0.3) / Math.max(1, count));
+  return Math.min(108, Math.max(34, ideal)) / WORLD.width;
+}
+export const WANTED_PACES = ['douce', 'normale', 'corsee'] as const;
+export type WantedPace = (typeof WANTED_PACES)[number];
+
+export const sortingSettingsSchema = z
   .object({
+    game: z.literal('sorting'),
     bottleCount: z.number().int().min(6).max(MAX_BOTTLES),
     maxPlayers: z.number().int().min(2).max(8),
     colorCount: z.number().int().min(3).max(6),
     shapeCount: z.number().int().min(1).max(MAX_SHAPES),
   })
   .strict();
+export type SortingSettings = z.infer<typeof sortingSettingsSchema>;
+
+export const wantedSettingsSchema = z
+  .object({
+    game: z.literal('wanted'),
+    maxPlayers: z.number().int().min(2).max(8),
+    levels: z.number().int().min(WANTED_LEVELS.min).max(WANTED_LEVELS.max),
+    startHeads: z.number().int().min(WANTED_HEADS.min).max(40),
+    pace: z.enum(WANTED_PACES),
+  })
+  .strict();
+export type WantedSettings = z.infer<typeof wantedSettingsSchema>;
+
+/** Les réglages portent leur jeu : le lobby et les rooms restent communs. */
+export const settingsSchema = z.discriminatedUnion('game', [
+  sortingSettingsSchema,
+  wantedSettingsSchema,
+]);
 export type RoomSettings = z.infer<typeof settingsSchema>;
-export const DEFAULT_SETTINGS: RoomSettings = {
+export const DEFAULT_SETTINGS: SortingSettings = {
+  game: 'sorting',
   bottleCount: 40,
   maxPlayers: 4,
   colorCount: 6,
   shapeCount: 4,
+};
+export const DEFAULT_WANTED_SETTINGS: WantedSettings = {
+  game: 'wanted',
+  maxPlayers: 4,
+  levels: 8,
+  startHeads: 10,
+  pace: 'normale',
+};
+export const DEFAULT_BY_GAME: Record<GameId, RoomSettings> = {
+  sorting: DEFAULT_SETTINGS,
+  wanted: DEFAULT_WANTED_SETTINGS,
 };
 export const pointSchema = z
   .object({ x: z.number().finite().min(0).max(1), y: z.number().finite().min(0).max(1) })
@@ -93,7 +149,7 @@ export const commandSchema = z.discriminatedUnion('type', [
     .object({
       ...request,
       type: z.literal('room:create'),
-      gameId: z.literal('sorting'),
+      gameId: z.enum(GAME_IDS),
       settings: settingsSchema,
     })
     .strict(),
@@ -108,6 +164,14 @@ export const commandSchema = z.discriminatedUnion('type', [
     .object({ ...request, ...drag, type: z.literal('bottle:release'), position: pointSchema })
     .strict(),
   z.object({ ...request, ...drag, type: z.literal('bottle:cancel') }).strict(),
+  z
+    .object({
+      ...inRoom,
+      type: z.literal('wanted:pick'),
+      roundId: z.uuid(),
+      headId: z.string().min(1).max(40),
+    })
+    .strict(),
 ]);
 export type Command = z.infer<typeof commandSchema>;
 export type CommandInput = Command extends infer C
@@ -160,11 +224,36 @@ export interface SortingState {
   startedAt: number;
   finishedAt: number | null;
 }
+export interface WantedHead {
+  id: string;
+  position: Point;
+  tilt: number;
+  scale: number;
+  look: HeadLook;
+}
+/**
+ * L'état public ne dit jamais laquelle est l'intruse : le serveur seul tranche.
+ * La réponse reste déductible en analysant les têtes, ce qui est le principe même du jeu ;
+ * l'objectif est que personne ne puisse s'attribuer une trouvaille que le serveur refuse.
+ */
+export interface WantedState {
+  roundId: string;
+  level: number;
+  levels: number;
+  heads: WantedHead[];
+  startedAt: number;
+  levelStartedAt: number;
+  finishedAt: number | null;
+  /** Dernière bonne réponse, pour l'animation et le décompte. */
+  lastFound: { playerId: string; headId: string; level: number } | null;
+  misses: Record<string, number>;
+}
+export type GameState = ({ game: 'sorting' } & SortingState) | ({ game: 'wanted' } & WantedState);
 export type RoomStatus = 'lobby' | 'playing' | 'finished';
 export interface RoomSummary {
   id: string;
   code: string;
-  gameId: 'sorting';
+  gameId: GameId;
   hostId: string;
   hostName: string;
   status: RoomStatus;
@@ -175,7 +264,7 @@ export interface RoomSummary {
 }
 export interface RoomState extends RoomSummary {
   players: Player[];
-  game: SortingState | null;
+  game: GameState | null;
 }
 export interface GuestSession {
   id: string;
@@ -231,9 +320,29 @@ export const GAMES = [
   {
     id: 'sorting',
     name: 'À sa place',
+    tagline: 'RANGEMENT',
     description:
       'Un peu de bazar, beaucoup de douceur. Triez les couleurs et faites de la place, ensemble.',
     minPlayers: 2,
     maxPlayers: 8,
   },
-] as const;
+  {
+    id: 'wanted',
+    name: 'Tout seul',
+    tagline: 'OBSERVATION',
+    description:
+      'Dans la foule, une tête n’a pas de jumelle. Trouvez-la avant les autres, niveau après niveau.',
+    minPlayers: 2,
+    maxPlayers: 8,
+  },
+] as const satisfies readonly {
+  id: GameId;
+  name: string;
+  tagline: string;
+  description: string;
+  minPlayers: number;
+  maxPlayers: number;
+}[];
+export function gameMeta(id: GameId) {
+  return GAMES.find((g) => g.id === id)!;
+}

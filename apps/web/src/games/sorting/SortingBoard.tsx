@@ -7,6 +7,7 @@ import {
   type Bottle,
   type Player,
   type RoomState,
+  type SortingState,
 } from '@ensemble/shared';
 import { Avatar } from '../../components/ui';
 import { ObjectArt } from '../../components/ObjectArt';
@@ -112,11 +113,10 @@ function Elapsed({ startedAt, finishedAt }: { startedAt: number; finishedAt: num
   }, [finishedAt]);
   return <>{elapsedLabel(Math.max(0, (finishedAt ?? now) - startedAt))}</>;
 }
-export function SortingBoard({ room }: { room: RoomState }) {
+export function SortingBoard({ room, game }: { room: RoomState; game: SortingState }) {
   const { session, status, command, notify } = useRealtime();
-  const engine = useBoardEngine(room);
+  const engine = useBoardEngine(room, game);
   const [restarting, setRestarting] = useState(false);
-  const game = room.game!;
   const sortedCount = game.bottles.filter((b) => b.sorted).length;
   const finished = room.status === 'finished';
   const storedPerColor = useMemo(() => {

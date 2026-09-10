@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it } from 'vitest';
 import {
   binAt,
   DEFAULT_SETTINGS,
+  DEFAULT_WANTED_SETTINGS,
   MAX_BOTTLES,
   MAX_SHAPES,
   LOCK_TTL_MS,
@@ -56,6 +57,23 @@ describe('authoritative cooperative rooms', () => {
     expect(room.settings).toEqual(settings);
     expect(JSON.stringify(room)).not.toContain(alice.token);
   });
+  it('étiquette la table avec son jeu et refuse un mélange de réglages', () => {
+    const wanted = rooms.create(alice, DEFAULT_WANTED_SETTINGS);
+    expect(rooms.snapshot(wanted).gameId).toBe('wanted');
+    const sorting = rooms.create(bob, settings);
+    expect(rooms.snapshot(sorting).gameId).toBe('sorting');
+    // Annoncer un jeu et envoyer les réglages d'un autre doit être rejeté.
+    expect(() =>
+      rooms.handle(sessions.create('Clara'), {
+        requestId: randomUUID(),
+        type: 'room:create',
+        gameId: 'wanted',
+        settings,
+      }),
+    ).toThrow('ne correspondent pas');
+    // On ne change pas de jeu en cours de lobby.
+    expect(() => rooms.update(alice, wanted, settings)).toThrow('pas ceux de ce jeu');
+  });
   it('joins idempotently and assigns different colors', () => {
     const code = rooms.create(alice, settings);
     rooms.join(bob, code);
@@ -101,6 +119,7 @@ describe('authoritative cooperative rooms', () => {
   it('scatters objects clear of every crate and never on a grid', () => {
     // The densest board the settings allow: the maximum objects over the fewest colours.
     const dense = {
+      ...DEFAULT_SETTINGS,
       bottleCount: MAX_BOTTLES,
       maxPlayers: 2,
       colorCount: 3,

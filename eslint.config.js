@@ -18,7 +18,13 @@ export default tseslint.config(
   ...tseslint.configs.recommended,
   {
     languageOptions: { globals: { ...globals.node, ...globals.browser } },
-    rules: { '@typescript-eslint/no-unused-vars': ['error', { argsIgnorePattern: '^_' }] },
+    rules: {
+      '@typescript-eslint/no-unused-vars': [
+        'error',
+        // Retirer un champ par déstructuration est la façon idiomatique de le masquer.
+        { argsIgnorePattern: '^_', ignoreRestSiblings: true },
+      ],
+    },
   },
   {
     files: ['apps/web/src/**/*.{ts,tsx}'],

@@ -25,8 +25,8 @@ createRoot(document.getElementById('root')!).render(
           <Routes>
             <Route element={<Layout />}>
               <Route index element={<Home />} />
-              <Route path="games/sorting" element={<GamePage />} />
-              <Route path="games/sorting/rooms/:code" element={<RoomPage />} />
+              <Route path="games/:gameId" element={<GamePage />} />
+              <Route path="games/:gameId/rooms/:code" element={<RoomPage />} />
               <Route
                 path="*"
                 element={

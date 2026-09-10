@@ -52,7 +52,7 @@ export function Layout() {
         </div>
       )}
       {room && (
-        <Link className="resume-link" to={'/games/sorting/rooms/' + room.code}>
+        <Link className="resume-link" to={'/games/' + room.gameId + '/rooms/' + room.code}>
           Votre table {room.code} <ArrowUpRight size={14} />
         </Link>
       )}

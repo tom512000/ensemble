@@ -6,6 +6,7 @@ import {
   type Point,
   type RemoteMotion,
   type RoomState,
+  type SortingState,
 } from '@ensemble/shared';
 import { errorMessage, useRealtime } from '../../lib/realtime';
 
@@ -37,7 +38,7 @@ interface CursorPoint extends AnimatedPoint {
   visible: boolean;
 }
 const clamp = (value: number) => Math.min(1, Math.max(0, value));
-export function useBoardEngine(room: RoomState) {
+export function useBoardEngine(room: RoomState, game: SortingState) {
   const { socket, session, status, command, notify } = useRealtime();
   const boardRef = useRef<HTMLDivElement>(null);
   const bottles = useRef(new Map<string, HTMLButtonElement>());
@@ -45,6 +46,7 @@ export function useBoardEngine(room: RoomState) {
   const targets = useRef(new Map<string, BottleAnimation>());
   const remoteCursors = useRef(new Map<string, CursorPoint>());
   const currentRoom = useRef(room);
+  const currentGame = useRef(game);
   const drag = useRef<Drag | null>(null);
   const pointer = useRef<Point | null>(null);
   /**
@@ -60,9 +62,10 @@ export function useBoardEngine(room: RoomState) {
   const byId = useRef(new Map<string, Bottle>());
   useEffect(() => {
     currentRoom.current = room;
+    currentGame.current = game;
     enabled.current = status === 'connected' && room.status === 'playing';
-    byId.current = new Map(room.game!.bottles.map((bottle) => [bottle.id, bottle]));
-    for (const bottle of room.game!.bottles) {
+    byId.current = new Map(game.bottles.map((bottle) => [bottle.id, bottle]));
+    for (const bottle of game.bottles) {
       const previous = lastBottleStates.current.get(bottle.id);
       const existing = targets.current.get(bottle.id);
       if (!existing)
@@ -94,7 +97,7 @@ export function useBoardEngine(room: RoomState) {
       if (!room.players.some((player) => player.id === id && player.connected))
         remoteCursors.current.delete(id);
     }
-  }, [room, status, notify]);
+  }, [room, game, status, notify]);
   function pointAt(clientX: number, clientY: number): Point {
     const rect = size.current;
     if (!rect.width || !rect.height) return { x: 0, y: 0 };
@@ -104,7 +107,7 @@ export function useBoardEngine(room: RoomState) {
     };
   }
   function reconcile(id: string) {
-    const bottle = currentRoom.current.game!.bottles.find((b) => b.id === id);
+    const bottle = currentGame.current.bottles.find((b) => b.id === id);
     const target = targets.current.get(id);
     if (bottle && target) target.target = { ...bottle.position };
   }
@@ -114,7 +117,7 @@ export function useBoardEngine(room: RoomState) {
     try {
       const common = {
         code: currentRoom.current.code,
-        roundId: currentRoom.current.game!.roundId,
+        roundId: currentGame.current.roundId,
         bottleId: active.bottleId,
         dragId: active.dragId,
       };
@@ -156,7 +159,7 @@ export function useBoardEngine(room: RoomState) {
       await command({
         type: 'bottle:grab',
         code: room.code,
-        roundId: room.game!.roundId,
+        roundId: game.roundId,
         bottleId: bottle.id,
         dragId: active.dragId,
       });
@@ -313,7 +316,7 @@ export function useBoardEngine(room: RoomState) {
             socket.volatile.emit('motion', {
               type: 'bottle:move',
               code: currentRoom.current.code,
-              roundId: currentRoom.current.game!.roundId,
+              roundId: currentGame.current.roundId,
               bottleId: active.bottleId,
               dragId: active.dragId,
               position: active.position,

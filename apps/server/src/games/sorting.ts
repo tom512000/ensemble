@@ -6,6 +6,7 @@ import {
   MAX_SHAPES,
   objectWidth,
   type Bottle,
+  type SortingSettings,
   type Point,
   type SortingState,
 } from '@ensemble/shared';
@@ -13,7 +14,7 @@ import type { GameDefinition } from './definition.js';
 import { requireCondition } from '../platform/errors.js';
 import { binSlot, layoutBins, scatter } from './layout.js';
 
-export const sortingGame: GameDefinition<SortingState> = {
+export const sortingGame: GameDefinition<SortingSettings, SortingState> = {
   id: 'sorting',
   create(settings, now) {
     const bins = layoutBins(settings.colorCount);

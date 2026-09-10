@@ -146,6 +146,16 @@ export function RoomPage() {
     setError('');
     void command({ type: 'room:join', code }).catch((error) => setError(errorMessage(error)));
   }, [session, status, room?.code, code, command, retry]);
+  // A round takes over the window: the site header, the footer and the page margins would
+  // otherwise eat two thirds of the screen, leaving the board too small to play comfortably.
+  const playing = Boolean(room && room.code === code && room.status !== 'lobby');
+  useEffect(() => {
+    if (!playing) return;
+    document.body.dataset.immersive = 'true';
+    return () => {
+      delete document.body.dataset.immersive;
+    };
+  }, [playing]);
   async function leave() {
     try {
       if (room?.code === code) await command({ type: 'room:leave', code });
@@ -204,7 +214,7 @@ export function RoomPage() {
       </main>
     );
   return (
-    <main className={'page-container room-page ' + (room.status !== 'lobby' ? 'in-game' : '')}>
+    <main className={'page-container room-page ' + (playing ? 'in-game' : '')}>
       <div className="room-topline">
         <Link className="back-link" to="/games/sorting">
           À sa place <span>/</span>Table {room.code}

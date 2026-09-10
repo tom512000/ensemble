@@ -849,3 +849,83 @@
     font-size: 10px;
   }
 }
+
+/*
+ * Mode immersif : pendant une manche, le plateau prend la fenêtre.
+ *
+ * Mesuré avant : le plateau n'occupait que 39 % de la surface de l'écran, le reste partant
+ * en en-tête de site, titres, marges et pied de page. Avec beaucoup d'objets, chacun tombait
+ * à 38 px de large, trop petit pour viser confortablement. Comme les bacs occupent les quatre
+ * bords, agrandir le plateau était la seule marge de manœuvre : on ne peut pas faire défiler.
+ */
+body[data-immersive] {
+  overflow: hidden;
+}
+body[data-immersive] .site-header,
+body[data-immersive] .site-footer,
+body[data-immersive] .resume-link {
+  display: none;
+}
+body[data-immersive] .app-shell {
+  max-width: none;
+}
+body[data-immersive] .room-page.in-game {
+  height: 100dvh;
+  max-width: none;
+  margin: 0;
+  padding: 8px 14px 6px;
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+}
+body[data-immersive] .room-topline {
+  flex: 0 0 auto;
+  margin: 0 0 4px;
+  font-size: 12px;
+}
+body[data-immersive] .game-session {
+  /* Doit primer sur les media queries de hauteur, qui visent .game-session elles aussi. */
+  --board-chrome: 122px;
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+/* Une seule barre compacte : titre, équipe, chronomètre et progression sur la même ligne. */
+body[data-immersive] .game-toolbar {
+  flex: 0 0 auto;
+  margin: 0;
+  gap: 14px;
+}
+body[data-immersive] .game-toolbar .eyebrow {
+  display: none;
+}
+body[data-immersive] .game-toolbar h1 {
+  font-size: 20px;
+  letter-spacing: -0.6px;
+}
+body[data-immersive] .progress-row {
+  flex: 0 0 auto;
+  margin: 4px 0 6px;
+}
+body[data-immersive] .board-wrap {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  padding: 8px;
+}
+body[data-immersive] .sorting-board {
+  margin: auto;
+}
+body[data-immersive] .board-instructions {
+  flex: 0 0 auto;
+  margin-top: 4px;
+  font-size: 10px;
+}
+body[data-immersive] .victory-panel {
+  position: absolute;
+  inset: auto 0 0;
+  z-index: 90;
+  margin: 0 auto 16px;
+  max-width: 640px;
+}

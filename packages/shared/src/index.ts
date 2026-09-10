@@ -36,12 +36,19 @@ export const SHAPES = [
   { id: 'tube', label: 'Tube' },
 ] as const;
 export const MAX_SHAPES = SHAPES.length;
+/** Objects are drawn in a 64x100 box, so they are markedly taller than they are wide. */
+export const OBJECT_ASPECT = 100 / 64;
 /**
- * Width of one object as a fraction of the board. Objects shrink as the board fills so a
- * busy round stays readable and every item stays comfortably grabbable.
+ * Width of one object as a fraction of the board.
+ *
+ * Sized so every object together covers about a third of the board, whatever the count.
+ * A denser target looks generous for a moment and then becomes unplayable: at 120 objects
+ * the previous formula asked for 73% coverage, which no scatter can place without piling
+ * objects on top of each other.
  */
 export function objectWidth(bottleCount: number): number {
-  const ideal = Math.sqrt((WORLD.width * WORLD.height * 0.78) / Math.max(1, bottleCount)) * 0.78;
+  const share = WORLD.width * WORLD.height * 0.34;
+  const ideal = Math.sqrt(share / (OBJECT_ASPECT * Math.max(1, bottleCount)));
   return Math.min(64, Math.max(26, ideal)) / WORLD.width;
 }
 export const NETWORK_INTERVAL_MS = 40;

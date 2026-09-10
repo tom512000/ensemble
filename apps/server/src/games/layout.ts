@@ -1,5 +1,6 @@
 import {
   COLORS,
+  OBJECT_ASPECT,
   WORLD,
   type Bin,
   type BinEdge,
@@ -137,13 +138,18 @@ export function scatter(
 
   const spanXpx = Math.max(1, (area.x1 - area.x0) * WORLD.width);
   const spanYpx = Math.max(1, (area.y1 - area.y0) * WORLD.height);
-  // Half an object's height is 0.78 of its width, so this keeps every centre exposed.
-  const idealGap = widthPx * 0.9;
-  let cellPx = Math.max(idealGap, Math.sqrt((spanXpx * spanYpx) / Math.max(1, count * 1.35)));
+  const heightPx = widthPx * OBJECT_ASPECT;
+  // Cells take the shape of an object rather than being square. Square cells leave tall
+  // objects far apart sideways while stacking them vertically, which is exactly what a busy
+  // board looked like: tidy columns of overlapping bottles.
+  let scale = Math.max(
+    0.6,
+    Math.sqrt((spanXpx * spanYpx) / Math.max(1, count * 1.3 * widthPx * heightPx)),
+  );
 
-  for (let attempt = 0; attempt < 40; attempt++, cellPx *= 0.94) {
-    const cols = Math.max(1, Math.floor(spanXpx / cellPx));
-    const rows = Math.max(1, Math.floor(spanYpx / cellPx));
+  for (let attempt = 0; attempt < 40; attempt++, scale *= 0.96) {
+    const cols = Math.max(1, Math.floor(spanXpx / Math.max(1, widthPx * 0.95 * scale)));
+    const rows = Math.max(1, Math.floor(spanYpx / Math.max(1, heightPx * 0.62 * scale)));
     const cellW = (area.x1 - area.x0) / cols;
     const cellH = (area.y1 - area.y0) / rows;
     const cells: Point[] = [];
@@ -155,10 +161,10 @@ export function scatter(
       }
     }
     if (cells.length < count) continue;
-    // Neighbours end up at least this far apart, whatever the jitter does.
-    const gap = Math.min(idealGap, cellPx);
-    const jitterX = Math.max(0, (cellW - toX(gap)) / 2);
-    const jitterY = Math.max(0, (cellH - toY(gap)) / 2);
+    // Whatever the jitter does, neighbours stay far enough apart that no object can cover
+    // another one's centre, which is what has to stay clickable.
+    const jitterX = Math.max(0, (cellW - toX(widthPx * 0.9)) / 2);
+    const jitterY = Math.max(0, (cellH - toY(heightPx * 0.54)) / 2);
     return shuffle(cells, rng)
       .slice(0, count)
       .map((cell) => {

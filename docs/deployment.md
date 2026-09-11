@@ -100,3 +100,50 @@ une commande forcée côté serveur (`command="..."` dans `authorized_keys`), si
 rien exécuter d'autre. Le script de déploiement vit donc sur le serveur et n'apparaît pas dans le
 dépôt. Conséquence à garder en tête : s'il appelle un outil absent de la machine, le déploiement
 échoue avec un code 127 alors que la construction des images a parfaitement réussi.
+
+## Connexion temps réel en production
+
+Symptôme typique d'un problème de proxy : le bouton de création reste sur « Connexion… », et
+l'onglet réseau montre des requêtes `socket.io/?transport=polling` dont l'une échoue en 400 avec
+`{"code":1,"message":"Session ID unknown"}`. La socket n'atteint jamais l'état connecté.
+
+Deux causes se cumulent :
+
+1. **La connexion ne passe jamais en WebSocket.** Toutes les requêtes restent en
+   `transport=polling`. C'est le signe que le reverse proxy TLS placé devant le port 8085 ne
+   transmet pas les en-têtes d'upgrade. Le Nginx fourni les transmet ; c'est le proxy externe
+   qui doit faire de même :
+
+   ```nginx
+   location /socket.io/ {
+     proxy_pass http://127.0.0.1:8085;
+     proxy_http_version 1.1;
+     proxy_set_header Upgrade $http_upgrade;
+     proxy_set_header Connection "upgrade";
+     proxy_set_header Host $host;
+     proxy_read_timeout 75s;
+     proxy_buffering off;
+   }
+   ```
+
+   Caddy transmet l'upgrade sans configuration particulière ; Traefik également.
+
+2. **Des délais trop serrés pour le long-polling.** Si un aller-retour dépasse le délai de ping,
+   le serveur ferme la session et la requête suivante repart en « Session ID unknown ». Les délais
+   sont désormais proches des défauts de Socket.IO (ping 25 s / 20 s, connexion 45 s).
+
+Vérification depuis un poste : dans l'onglet réseau, filtrer sur `socket.io`. Une connexion saine
+montre une requête `transport=websocket` en statut **101 Switching Protocols** juste après la
+poignée de main en polling.
+
+Vérification sur le serveur : un conteneur qui redémarre en boucle efface les sessions en mémoire
+et produit le même symptôme.
+
+```sh
+docker compose ps                       # colonne STATUS : pas de « Restarting »
+docker compose logs --tail=50 server    # pas de redémarrages répétés
+docker compose ps server --format json | grep -c '"Service":"server"'   # doit valoir 1
+```
+
+Le jeu garde son état en mémoire : **une seule instance** du service `server` doit tourner. Deux
+instances sans affinité de session reproduiraient exactement cette erreur.

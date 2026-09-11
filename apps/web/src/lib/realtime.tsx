@@ -82,7 +82,8 @@ export function RealtimeProvider({ children }: { children: ReactNode }) {
       autoConnect: false,
       reconnectionDelay: 500,
       reconnectionDelayMax: 3000,
-      timeout: 5000,
+      // Doit laisser le temps à une poignée de main qui traverse un proxy TLS.
+      timeout: 20_000,
     });
     setSocket(client);
     socketRef.current = client;

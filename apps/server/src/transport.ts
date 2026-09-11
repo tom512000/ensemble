@@ -26,9 +26,14 @@ export function attachTransport(
     allowRequest: (req, callback) =>
       callback(null, !req.headers.origin || origins.includes(req.headers.origin)),
     maxHttpBufferSize: 8192,
-    pingInterval: 10_000,
-    pingTimeout: 5000,
-    connectTimeout: 5000,
+    // Valeurs proches des défauts de Socket.IO, choisies pour de vrais réseaux.
+    // Des délais serrés conviennent en local mais pas derrière un proxy TLS : si la
+    // connexion reste en long-polling, un aller-retour dépasse vite quelques secondes,
+    // le serveur ferme la session, et la requête suivante portant ce sid repart en
+    // « Session ID unknown » — la connexion ne s'établit alors jamais.
+    pingInterval: 25_000,
+    pingTimeout: 20_000,
+    connectTimeout: 45_000,
   });
   const responses = new WeakMap<Session, Map<string, { fingerprint: string; reply: Reply }>>();
   let listTimer: ReturnType<typeof setTimeout> | undefined;
